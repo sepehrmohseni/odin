@@ -81,3 +81,6 @@ docker-compose.override.yml
 # Documentation site build output
 _site/
 site/
+
+# Python bytecode (tools/)
+__pycache__/
