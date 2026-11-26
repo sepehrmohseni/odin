@@ -68,6 +68,7 @@ upstream, including its errors, are passed through unchanged.
 | `/aggregate?services=a,b` | Calls several services and returns their JSON together |
 | `/admin` | Admin interface (`admin.enabled`) |
 | `/debug/routes`, `/debug/config` | Route list and version (`server.debugEndpoints`) |
+| `/openapi.json`, `/openapi.yaml`, `/openapi` | [OpenAPI document](openapi.md) and Swagger UI (`openapi.enabled`, `openapi.uiEnabled`) |
 
 ## Configuration lifecycle
 

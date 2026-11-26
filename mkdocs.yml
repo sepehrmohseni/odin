@@ -30,6 +30,7 @@ exclude_docs: |
   !/caching.md
   !/transformations.md
   !/protocols.md
+  !/openapi.md
   !/observability.md
   !/admin.md
   !/plugins.md
@@ -55,6 +56,7 @@ nav:
       - Caching: caching.md
       - Transformations: transformations.md
       - WebSocket, SSE and GraphQL: protocols.md
+      - OpenAPI document: openapi.md
       - Observability: observability.md
       - Admin interface: admin.md
       - Plugins: plugins.md

@@ -12,6 +12,11 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `pre-proxy`) ordered by priority and limited to their routes; enabling or disabling one takes
   effect on the next request. Programs embedding the gateway can register compiled-in plugins
   with `Gateway.Plugins()` (SEC-14).
+- `openapi`: an OpenAPI 3 document of the service routes at `/openapi.json` and `/openapi.yaml`,
+  and Swagger UI at `openapi.uiPath`. The document describes only what the gateway knows (paths,
+  methods, JWT requirement, rate-limit and gateway error responses), never upstream addresses;
+  `autoGenerate: false` serves a hand-written document instead. `openapi.autoGenerate` defaults
+  to true (MNT-03).
 
 ### Fixed
 

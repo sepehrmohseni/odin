@@ -288,14 +288,26 @@ type ClusterTLS struct {
 }
 
 type OpenAPIConfig struct {
-	Enabled      bool   `yaml:"enabled"`
-	Title        string `yaml:"title"`
-	Version      string `yaml:"version"`
-	Description  string `yaml:"description"`
-	AutoGenerate bool   `yaml:"autoGenerate"`
-	OutputPath   string `yaml:"outputPath"`
-	UIEnabled    bool   `yaml:"uiEnabled"`
-	UIPath       string `yaml:"uiPath"`
+	// Serve an OpenAPI 3 document of the service routes at /openapi.json and /openapi.yaml.
+	// It is public: it lists every service's base path and whether it needs a token.
+	Enabled bool `yaml:"enabled"`
+	// Document title (default "Odin API Gateway").
+	Title string `yaml:"title"`
+	// Document version (default 1.0.0).
+	Version string `yaml:"version"`
+	// Document description.
+	Description string `yaml:"description"`
+	// Generate the document from the services (default true). Set false to serve the
+	// hand-written document at outputPath instead.
+	AutoGenerate *bool `yaml:"autoGenerate"`
+	// With autoGenerate, also write the generated document here at startup (YAML for .yaml or
+	// .yml, else JSON); without it, the document (JSON or YAML) to serve.
+	OutputPath string `yaml:"outputPath"`
+	// Serve Swagger UI for the document at uiPath. The page loads Swagger UI from jsDelivr
+	// (pinned release, integrity-checked), so browsers need to reach cdn.jsdelivr.net.
+	UIEnabled bool `yaml:"uiEnabled"`
+	// Path of the Swagger UI page (default /openapi).
+	UIPath string `yaml:"uiPath"`
 }
 
 type MongoDBConfig struct {

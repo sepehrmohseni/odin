@@ -280,14 +280,14 @@ the main file. For a guided introduction see [Concepts](../concepts.md).
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `openapi.enabled` | boolean |  |
-| `openapi.title` | string |  |
-| `openapi.version` | string |  |
-| `openapi.description` | string |  |
-| `openapi.autoGenerate` | boolean |  |
-| `openapi.outputPath` | string |  |
-| `openapi.uiEnabled` | boolean |  |
-| `openapi.uiPath` | string |  |
+| `openapi.enabled` | boolean | Serve an OpenAPI 3 document of the service routes at /openapi.json and /openapi.yaml. It is public: it lists every service's base path and whether it needs a token. |
+| `openapi.title` | string | Document title (default "Odin API Gateway"). |
+| `openapi.version` | string | Document version (default 1.0.0). |
+| `openapi.description` | string | Document description. |
+| `openapi.autoGenerate` | boolean | Generate the document from the services (default true). Set false to serve the hand-written document at outputPath instead. |
+| `openapi.outputPath` | string | With autoGenerate, also write the generated document here at startup (YAML for .yaml or .yml, else JSON); without it, the document (JSON or YAML) to serve. |
+| `openapi.uiEnabled` | boolean | Serve Swagger UI for the document at uiPath. The page loads Swagger UI from jsDelivr (pinned release, integrity-checked), so browsers need to reach cdn.jsdelivr.net. |
+| `openapi.uiPath` | string | Path of the Swagger UI page (default /openapi). |
 
 ## `mongodb`
 

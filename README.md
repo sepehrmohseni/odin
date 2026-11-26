@@ -125,8 +125,8 @@ test/unit/           tests (test/unit/pkg/gateway drives the whole gateway)
 docker/ci/ scripts/  check image and wrappers;  deployments/  Docker, Kubernetes, Helm
 ```
 
-Some packages are not wired into the gateway yet (WASM, multi-cluster, OpenAPI generation, AI
-traffic analysis); see [ROADMAP.md](ROADMAP.md).
+Some packages are not wired into the gateway yet (WASM, multi-cluster, AI traffic analysis);
+see [ROADMAP.md](ROADMAP.md).
 
 ## Deployment
 

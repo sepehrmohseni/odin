@@ -24,6 +24,7 @@ import (
 	"odin/pkg/middleware"
 	"odin/pkg/mongodb"
 	"odin/pkg/monitoring"
+	"odin/pkg/openapi"
 	"odin/pkg/plugins"
 	"odin/pkg/ratelimit"
 	"odin/pkg/routing"
@@ -636,6 +637,15 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 
 	if err := router.RegisterRoutes(); err != nil {
 		return nil, fmt.Errorf("failed to register routes: %w", err)
+	}
+
+	if cfg.OpenAPI.Enabled {
+		doc, err := openapi.Build(cfg.OpenAPI, registry.GetAllServices(), logger)
+		if err != nil {
+			return nil, fmt.Errorf("openapi: %w", err)
+		}
+		openapi.Register(e, doc, cfg.OpenAPI.Title, cfg.OpenAPI.UIEnabled, cfg.OpenAPI.UIPath)
+		logger.WithField("ui", cfg.OpenAPI.UIEnabled).Info("OpenAPI document served at /openapi.json and /openapi.yaml")
 	}
 
 	// The admin is only mounted when enabled. (It used to be mounted always, with its auth
