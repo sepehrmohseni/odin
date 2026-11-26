@@ -28,7 +28,9 @@ The script:
 4. waits until every container is healthy and prints the admin URL, the login and sample
    requests.
 
-The first run builds the images, which takes a few minutes. Then:
+The first run builds the images, which takes a few minutes. (`scripts/quickstart.sh --demo`
+starts the same stack with admin / admin and generated traffic instead; see [Demo](demo.md).)
+Then:
 
 ```bash
 curl http://localhost:8080/api/products         # proxied to the products backend

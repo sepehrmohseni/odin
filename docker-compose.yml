@@ -6,6 +6,7 @@
 #   docker compose down -v        # stop and delete the data volumes
 #
 # Optional profiles: `--profile observability` adds Prometheus (:9090) and Grafana (:3000);
+# `--profile demo` adds a traffic generator for the admin (see scripts/quickstart.sh --demo);
 # `--profile ai` adds the demo traffic-analysis service (:8000).
 
 name: odin
@@ -31,6 +32,7 @@ services:
       ODIN_ADMIN_USERNAME: ${ODIN_ADMIN_USERNAME:-admin}
       ODIN_ADMIN_PASSWORD: ${ODIN_ADMIN_PASSWORD:?set ODIN_ADMIN_PASSWORD in .env}
       ODIN_ADMIN_ALLOWED_ORIGINS: ${ODIN_ADMIN_ALLOWED_ORIGINS:-}
+      ODIN_DEMO: ${ODIN_DEMO:-}
       MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-odin}
       MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -118,6 +120,27 @@ services:
     healthcheck: *tcp-health
     environment:
       PORT: "8085"
+
+  # Demo only: a deliberately unreliable backend for the inventory route (config/compose.yaml).
+  inventory-service:
+    <<: *demo-backend
+    profiles: [demo]
+    command: ["node", "inventory-service/server.js"]
+    environment:
+      PORT: "8086"
+
+  # Generated traffic for the admin's dashboard (profile demo; scripts/quickstart.sh --demo).
+  traffic:
+    <<: *demo-backend
+    profiles: [demo]
+    command: ["node", "traffic/generate.js"]
+    environment:
+      GATEWAY: http://odin:8080
+      JWT_SECRET: ${ODIN_JWT_SECRET:?set ODIN_JWT_SECRET in .env}
+      RATE: ${ODIN_DEMO_RATE:-6}
+    depends_on:
+      odin:
+        condition: service_healthy
 
   prometheus:
     profiles: [observability]

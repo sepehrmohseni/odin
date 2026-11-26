@@ -22,6 +22,12 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   chart, latency percentiles and target health, and a filterable request log with curl commands.
   Bootstrap, Bootstrap Icons and htmx are pinned and checked with Subresource Integrity (Chart.js,
   loaded unpinned, and an unused date library are gone).
+- A demo: `scripts/quickstart.sh --demo` (admin / admin, a traffic generator, and an unreliable
+  inventory service that shows timeouts, health checks and the circuit breaker), a GitHub
+  Codespaces configuration that starts it, and a demo page on the documentation site with
+  screenshots and the quickstart's generated OpenAPI document. The quickstart stack now serves
+  its OpenAPI document and health-checks every service, and re-running the quickstart applies
+  edits to `config/compose.yaml`.
 - `odin -openapi json|yaml` prints the OpenAPI document for a configuration without starting
   the gateway.
 - `admin.allowedOrigins` (and `ODIN_ADMIN_ALLOWED_ORIGINS`): further origins the admin accepts

@@ -37,6 +37,10 @@ const authenticate = (req, res, next) => {
     next();
 };
 
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
 // Get all orders
 app.get('/api/orders', authenticate, (req, res) => {
     const userId = req.query.userId;

@@ -18,6 +18,14 @@ observability for HTTP, WebSocket and GraphQL services, with a web admin interfa
 
 </div>
 
+## Try it
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/sepehrmohseni/odin?quickstart=1)
+
+The codespace runs the whole stack in demo mode, with generated traffic: open port 8080, go to
+`/admin` and sign in with admin / admin. Screenshots and the demo's generated API documentation
+are on the [demo page](https://sepehrmohseni.github.io/odin/demo/).
+
 ## Quick start
 
 With Docker (Compose v2):
@@ -36,6 +44,9 @@ curl -i http://localhost:8080/api/orders      # 401: needs a JWT
 open http://localhost:8080/admin              # admin interface (login printed by the script)
 scripts/quickstart.sh --down                  # stop
 ```
+
+`scripts/quickstart.sh --demo` does the same with admin / admin and generated traffic, for a
+demo only.
 
 The [documentation site](https://sepehrmohseni.github.io/odin/) covers this and the other ways to install
 (plain Docker image, binary, Helm), your first routes and the admin interface.

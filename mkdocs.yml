@@ -23,6 +23,7 @@ exclude_docs: |
   /*.md
   !/index.md
   !/getting-started.md
+  !/demo.md
   !/concepts.md
   !/configuration.md
   !/traffic.md
@@ -48,6 +49,7 @@ hooks:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Demo: demo.md
   - Concepts: concepts.md
   - Guides:
       - Configuration: configuration.md

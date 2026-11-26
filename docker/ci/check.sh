@@ -93,6 +93,14 @@ docs() {
     echo "docs/reference/configuration.md is stale; run: scripts/docker-check.sh -- go run ./tools/configref > docs/reference/configuration.md" >&2
     return 1
   fi
+  # The demo page shows the document the quickstart stack serves; it must match config/compose.yaml.
+  printf '\n\033[1m==> odin -openapi (docs/demo/openapi.json up to date)\033[0m\n'
+  MONGO_ROOT_USERNAME=x MONGO_ROOT_PASSWORD=x go run ./cmd/odin -config config/compose.yaml -openapi json \
+    2>/dev/null >/tmp/openapi.json
+  if ! diff -u docs/demo/openapi.json /tmp/openapi.json; then
+    echo "docs/demo/openapi.json is stale; run: scripts/docker-check.sh -- sh -c 'MONGO_ROOT_USERNAME=x MONGO_ROOT_PASSWORD=x go run ./cmd/odin -config config/compose.yaml -openapi json' > docs/demo/openapi.json" >&2
+    return 1
+  fi
 }
 
 task="${1:-all}"

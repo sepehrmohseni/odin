@@ -1,0 +1,3332 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Odin quickstart",
+    "description": "The demo services of the Odin quickstart stack (docker-compose.yml).",
+    "version": "1.0.0"
+  },
+  "tags": [
+    {
+      "name": "categories",
+      "description": "Limited to 120 requests per minute per client."
+    },
+    {
+      "name": "inventory",
+      "description": "Limited to 600 requests per minute per client."
+    },
+    {
+      "name": "orders",
+      "description": "Requires a JWT bearer token. Limited to 600 requests per minute per client."
+    },
+    {
+      "name": "products",
+      "description": "Limited to 600 requests per minute per client."
+    },
+    {
+      "name": "users",
+      "description": "Limited to 600 requests per minute per client."
+    }
+  ],
+  "paths": {
+    "/api/categories": {
+      "get": {
+        "summary": "GET categories",
+        "description": "Forwarded to categories.",
+        "operationId": "getCategories",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "post": {
+        "summary": "POST categories",
+        "description": "Forwarded to categories.",
+        "operationId": "postCategories",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT categories",
+        "description": "Forwarded to categories.",
+        "operationId": "putCategories",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE categories",
+        "description": "Forwarded to categories.",
+        "operationId": "deleteCategories",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH categories",
+        "description": "Forwarded to categories.",
+        "operationId": "patchCategories",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      }
+    },
+    "/api/categories/{path}": {
+      "get": {
+        "summary": "GET categories",
+        "description": "Forwarded to categories.",
+        "operationId": "getCategoriesPath",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "post": {
+        "summary": "POST categories",
+        "description": "Forwarded to categories.",
+        "operationId": "postCategoriesPath",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT categories",
+        "description": "Forwarded to categories.",
+        "operationId": "putCategoriesPath",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE categories",
+        "description": "Forwarded to categories.",
+        "operationId": "deleteCategoriesPath",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH categories",
+        "description": "Forwarded to categories.",
+        "operationId": "patchCategoriesPath",
+        "tags": [
+          "categories"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "in": "path",
+          "description": "Any path below the base path. It may contain '/'; the gateway forwards it as is.",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/inventory": {
+      "get": {
+        "summary": "GET inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "getInventory",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "post": {
+        "summary": "POST inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "postInventory",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "putInventory",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "deleteInventory",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "patchInventory",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      }
+    },
+    "/api/inventory/{path}": {
+      "get": {
+        "summary": "GET inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "getInventoryPath",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "post": {
+        "summary": "POST inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "postInventoryPath",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "putInventoryPath",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "deleteInventoryPath",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH inventory",
+        "description": "Forwarded to inventory.",
+        "operationId": "patchInventoryPath",
+        "tags": [
+          "inventory"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "in": "path",
+          "description": "Any path below the base path. It may contain '/'; the gateway forwards it as is.",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/orders": {
+      "get": {
+        "summary": "GET orders",
+        "description": "Forwarded to orders.",
+        "operationId": "getOrders",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "POST orders",
+        "description": "Forwarded to orders.",
+        "operationId": "postOrders",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "PUT orders",
+        "description": "Forwarded to orders.",
+        "operationId": "putOrders",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "DELETE orders",
+        "description": "Forwarded to orders.",
+        "operationId": "deleteOrders",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "summary": "PATCH orders",
+        "description": "Forwarded to orders.",
+        "operationId": "patchOrders",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/orders/{path}": {
+      "get": {
+        "summary": "GET orders",
+        "description": "Forwarded to orders.",
+        "operationId": "getOrdersPath",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "POST orders",
+        "description": "Forwarded to orders.",
+        "operationId": "postOrdersPath",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "PUT orders",
+        "description": "Forwarded to orders.",
+        "operationId": "putOrdersPath",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "DELETE orders",
+        "description": "Forwarded to orders.",
+        "operationId": "deleteOrdersPath",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "summary": "PATCH orders",
+        "description": "Forwarded to orders.",
+        "operationId": "patchOrdersPath",
+        "tags": [
+          "orders"
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "in": "path",
+          "description": "Any path below the base path. It may contain '/'; the gateway forwards it as is.",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/products": {
+      "get": {
+        "summary": "GET products",
+        "description": "Forwarded to products.",
+        "operationId": "getProducts",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "post": {
+        "summary": "POST products",
+        "description": "Forwarded to products.",
+        "operationId": "postProducts",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT products",
+        "description": "Forwarded to products.",
+        "operationId": "putProducts",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE products",
+        "description": "Forwarded to products.",
+        "operationId": "deleteProducts",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH products",
+        "description": "Forwarded to products.",
+        "operationId": "patchProducts",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      }
+    },
+    "/api/products/{path}": {
+      "get": {
+        "summary": "GET products",
+        "description": "Forwarded to products.",
+        "operationId": "getProductsPath",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "post": {
+        "summary": "POST products",
+        "description": "Forwarded to products.",
+        "operationId": "postProductsPath",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT products",
+        "description": "Forwarded to products.",
+        "operationId": "putProductsPath",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE products",
+        "description": "Forwarded to products.",
+        "operationId": "deleteProductsPath",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH products",
+        "description": "Forwarded to products.",
+        "operationId": "patchProductsPath",
+        "tags": [
+          "products"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "in": "path",
+          "description": "Any path below the base path. It may contain '/'; the gateway forwards it as is.",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/users": {
+      "get": {
+        "summary": "GET users",
+        "description": "Forwarded to users.",
+        "operationId": "getUsers",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "post": {
+        "summary": "POST users",
+        "description": "Forwarded to users.",
+        "operationId": "postUsers",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT users",
+        "description": "Forwarded to users.",
+        "operationId": "putUsers",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE users",
+        "description": "Forwarded to users.",
+        "operationId": "deleteUsers",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH users",
+        "description": "Forwarded to users.",
+        "operationId": "patchUsers",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      }
+    },
+    "/api/users/{path}": {
+      "get": {
+        "summary": "GET users",
+        "description": "Forwarded to users.",
+        "operationId": "getUsersPath",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "post": {
+        "summary": "POST users",
+        "description": "Forwarded to users.",
+        "operationId": "postUsersPath",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT users",
+        "description": "Forwarded to users.",
+        "operationId": "putUsersPath",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE users",
+        "description": "Forwarded to users.",
+        "operationId": "deleteUsersPath",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH users",
+        "description": "Forwarded to users.",
+        "operationId": "patchUsersPath",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the next request is allowed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream could not be reached or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No healthy target, or the circuit breaker is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The upstream service's response, passed through."
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "path",
+          "in": "path",
+          "description": "Any path below the base path. It may contain '/'; the gateway forwards it as is.",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "details": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

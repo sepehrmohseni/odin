@@ -117,3 +117,18 @@
 [data-md-color-scheme="slate"] .md-typeset .md-button--primary:hover {
   color: #0b0c0f;
 }
+
+/* The static OpenAPI view on the demo page. Swagger UI is light only, so it sits in a frame. */
+.odin-api-frame {
+  display: block;
+  width: 100%;
+  height: 52rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.md-typeset img[src*="assets/demo/"] {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 6px;
+}

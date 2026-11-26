@@ -1,0 +1,23 @@
+// Live demo in GitHub Codespaces (or any devcontainer host): starts the quickstart stack in
+// demo mode (Odin, Redis, MongoDB, demo backends, generated traffic; admin / admin) with
+// scripts/quickstart.sh --demo and forwards the gateway's port, which Codespaces keeps private
+// to whoever opened the codespace. Codespaces time is billed to that person.
+{
+  "name": "Odin demo",
+  "image": "mcr.microsoft.com/devcontainers/base:3.0.9-noble",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4.1.3": {}
+  },
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb"
+  },
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "Odin (gateway, /admin, /openapi)",
+      "onAutoForward": "notify"
+    }
+  },
+  "postStartCommand": "scripts/quickstart.sh --demo"
+}

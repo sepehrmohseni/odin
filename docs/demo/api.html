@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Odin quickstart API</title>
+<!-- Same pinned, integrity-checked Swagger UI release as the gateway's /openapi page. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.36.0/swagger-ui.css"
+      integrity="sha384-z/AtSaOHGn5MJ5auAHXUypohywlIWLBZo1jeGmhdpVIbCnFhxAH92cwdV41oyINc" crossorigin="anonymous">
+<style>
+  body { margin: 0; background: #fff; }
+  .swagger-ui .topbar { display: none; }
+  .swagger-ui .information-container { padding-top: 0.5rem; }
+</style>
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.36.0/swagger-ui-bundle.js"
+        integrity="sha384-fUpRgC19yPykTqzdrUbdAg8NTiu16NEKf9U12J+IJWCg8/1mEI8f2+PEIz60Wyd+" crossorigin="anonymous"></script>
+<script>
+  // A static copy: there is no gateway behind this page, so "Try it out" is switched off.
+  window.ui = SwaggerUIBundle({
+    url: "openapi.json",
+    dom_id: "#swagger-ui",
+    supportedSubmitMethods: [],
+    defaultModelsExpandDepth: -1,
+    docExpansion: "list"
+  });
+</script>
+</body>
+</html>

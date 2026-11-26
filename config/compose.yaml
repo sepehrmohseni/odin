@@ -21,6 +21,13 @@ admin:
   username: ${ODIN_ADMIN_USERNAME:-admin}
   # password: from ODIN_ADMIN_PASSWORD
 
+# An OpenAPI document of the routes below at /openapi.json, browsable at /openapi.
+openapi:
+  enabled: true
+  title: Odin quickstart
+  description: The demo services of the Odin quickstart stack (docker-compose.yml).
+  uiEnabled: true
+
 auth:
   # jwtSecret: from ODIN_JWT_SECRET
   ignorePathRegexes:
@@ -62,6 +69,10 @@ services:
     targets: [http://products-service:8083]
     circuitBreaker:
       enabled: true
+    healthCheck:
+      enabled: true
+      path: /api/products
+      interval: 10s
 
   - name: orders
     basePath: /api/orders
@@ -69,6 +80,10 @@ services:
     authentication: true
     cache:
       enabled: false
+    healthCheck:
+      enabled: true
+      path: /health
+      interval: 10s
 
   - name: categories
     basePath: /api/categories
@@ -76,3 +91,29 @@ services:
     rateLimit:
       limit: 120
       window: 1m
+    healthCheck:
+      enabled: true
+      path: /health
+      interval: 10s
+
+  # A deliberately unreliable backend that only runs in demo mode (scripts/quickstart.sh
+  # --demo): it sometimes fails or is slow, and is down for maintenance 30 s in every 3 min,
+  # to show timeouts, retries, health checks and the circuit breaker. Without --demo its
+  # backend is not running and this route answers 502.
+  - name: inventory
+    basePath: /api/inventory
+    targets: [http://inventory-service:8086]
+    timeout: 1s
+    retryCount: 1
+    cache:
+      enabled: false
+    healthCheck:
+      enabled: true
+      path: /health
+      interval: 5s
+      unhealthyThreshold: 2
+    circuitBreaker:
+      enabled: true
+      failureRatio: 0.5
+      minRequests: 10
+      timeout: 15s
