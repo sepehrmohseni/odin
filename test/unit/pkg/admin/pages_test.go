@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"odin/pkg/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,4 +51,28 @@ func TestAdminRendererServesPluginPages(t *testing.T) {
 		require.NoError(t, err, page)
 		assert.NotEmpty(t, strings.TrimSpace(out.String()), page)
 	}
+}
+
+// The dashboard lists the configured services (it rendered the list without data and always
+// said "No services configured"), with edit links to the page that exists.
+func TestDashboardListsServices(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Services = []config.ServiceConfig{
+		{Name: "orders", BasePath: "/api/orders", Targets: []string{"http://orders:8080"}, Authentication: true},
+		{Name: "catalog", BasePath: "/api/catalog", Targets: []string{"http://catalog:8080"}},
+	}
+	e, _ := newAdmin(t, cfg)
+	auth := map[string]string{"Authorization": basic("root", "s3cret-pass")}
+
+	rec := do(e, http.MethodGet, "/admin/dashboard", "", auth)
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.NotContains(t, body, "No services configured")
+	assert.Contains(t, body, "<code>/api/orders</code>")
+	assert.Contains(t, body, "http://catalog:8080")
+	assert.Contains(t, body, `href="/admin/services/orders"`)
+	assert.NotContains(t, body, "/edit")
+
+	rec = do(e, http.MethodGet, "/admin/services/orders", "", auth)
+	assert.Equal(t, http.StatusOK, rec.Code, "the edit link leads to a page")
 }

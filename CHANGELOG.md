@@ -30,6 +30,8 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `post-request` and `pre-response` hooks fire; an `*echo.HTTPError` from a plugin keeps its
   status (COR-21).
 - Enabled uploaded plugins are activated again at startup.
+- The admin dashboard lists the configured services; it always said "No services configured".
+  Its Edit links lead to the edit page instead of a missing `/edit` route.
 - Gateway errors go through one handler: the `{"message": ...}` body is unchanged, a deadline
   is a 504 instead of a 500, errors wrapping `pkg/errors` sentinels get their status, and
   server errors are logged with the request (MNT-03).

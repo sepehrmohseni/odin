@@ -1,6 +1,8 @@
 package admin
 
 import (
+	"odin/pkg/config"
+
 	"github.com/labstack/echo/v4"
 )
 
@@ -116,8 +118,13 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 	h.logger.Info("Admin routes registered")
 }
 
+// handleDashboard lists the configured services. (It used to render the list with no data, so
+// it always said "No services configured".)
 func (h *AdminHandler) handleDashboard(c echo.Context) error {
-	return h.renderTemplate(c, "dashboard.html", nil)
+	configMu.Lock()
+	services := append([]config.ServiceConfig(nil), h.config.Services...)
+	configMu.Unlock()
+	return h.renderTemplate(c, "dashboard.html", map[string]interface{}{"Services": services})
 }
 
 func (h *AdminHandler) handleMonitoring(c echo.Context) error {
