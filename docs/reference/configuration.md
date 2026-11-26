@@ -312,19 +312,21 @@ the main file. For a guided introduction see [Concepts](../concepts.md).
 
 ## `ai`
 
+AIConfig configures traffic anomaly detection (see docs/observability.md).
+
 | Key | Type | Description |
 | --- | --- | --- |
-| `ai.enabled` | boolean |  |
-| `ai.analysisInterval` | duration |  |
-| `ai.baselineWindow` | duration |  |
-| `ai.anomalyThreshold` | number | Z-score threshold |
-| `ai.minSamplesForBaseline` | integer |  |
-| `ai.useGrokModel` | boolean |  |
-| `ai.grokServiceUrl` | string |  |
-| `ai.grokTimeout` | duration |  |
-| `ai.enableAlerts` | boolean |  |
-| `ai.alertWebhookUrl` | string |  |
-| `ai.retentionDays` | integer |  |
-| `ai.flushInterval` | duration | Traffic data flush interval |
-| `ai.tags` | map of string to string |  |
+| `ai.enabled` | boolean | Learn each service's normal traffic and report anomalies (admin: Anomalies). |
+| `ai.analysisInterval` | duration | Length of each analysed window (default 1m). |
+| `ai.baselineWindow` | duration | Roughly how far back the baseline reaches (default 1h). |
+| `ai.anomalyThreshold` | number | How many standard deviations from the baseline count as an anomaly (default 3). |
+| `ai.minSamplesForBaseline` | integer | Windows to learn from before anomalies are reported (default 10). |
+| `ai.useGrokModel` | boolean | Ask the analysis service at grokServiceUrl to explain new anomalies. |
+| `ai.grokServiceUrl` | string | Base URL of the analysis service (POST /analyze), such as deployments/grok. |
+| `ai.grokTimeout` | duration | Timeout for the analysis service (default 30s). |
+| `ai.enableAlerts` | boolean | POST new anomalies to alertWebhookUrl. |
+| `ai.alertWebhookUrl` | string | Webhook for anomaly alerts (JSON with a Slack-compatible "text"). |
+| `ai.alertMinSeverity` | string | Lowest severity that is sent: low, medium (default), high or critical. |
+| `ai.retentionDays` | integer | With MongoDB, how long anomalies are kept (default 30 days). |
+| `ai.tags` | map of string to string | Added to every anomaly, for example the environment. |
 

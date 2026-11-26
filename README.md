@@ -73,7 +73,8 @@ What Odin does today. Each item is covered by the end-to-end tests in
 - **Protocols**: HTTP/1.1, WebSocket and server-sent events (streamed), GraphQL with depth and
   introspection limits.
 - **Observability**: Prometheus metrics per service, OpenTelemetry traces with context
-  propagation, structured access logs, `/health`, `/ready` and `/live`.
+  propagation, structured access logs, `/health`, `/ready` and `/live`; traffic anomaly
+  detection per service (rate, server errors, latency) with webhook alerts.
 - **Plugins**: Go and WebAssembly middleware plugins in three phases of each service's pipeline
   (before authentication, after it, before proxying), ordered by priority and limited to routes;
   WebAssembly plugins are sandboxed, memory-capped and time-limited. Hook plugins around every
@@ -142,7 +143,7 @@ test/unit/           tests (test/unit/pkg/gateway drives the whole gateway)
 docker/ci/ scripts/  check image and wrappers;  deployments/  Docker, Kubernetes, Helm
 ```
 
-Some packages are not wired into the gateway yet (multi-cluster, AI traffic analysis);
+Multi-cluster routing is not wired into the gateway yet;
 see [ROADMAP.md](ROADMAP.md).
 
 ## Deployment

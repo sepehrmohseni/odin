@@ -21,6 +21,14 @@ admin:
   username: ${ODIN_ADMIN_USERNAME:-admin}
   # password: from ODIN_ADMIN_PASSWORD
 
+# Learn each service's normal traffic and report anomalies (admin: Anomalies). The demo's
+# unreliable inventory service gives it something to find within a few minutes.
+ai:
+  enabled: true
+  analysisInterval: 1m
+  baselineWindow: 15m
+  minSamplesForBaseline: 5
+
 # An OpenAPI document of the routes below at /openapi.json, browsable at /openapi.
 openapi:
   enabled: true

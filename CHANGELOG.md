@@ -12,6 +12,13 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `pre-proxy`) ordered by priority and limited to their routes; enabling or disabling one takes
   effect on the next request. Programs embedding the gateway can register compiled-in plugins
   with `Gateway.Plugins()` (SEC-14).
+- Traffic anomaly detection (`ai`): per-service baselines of request rate, server error share
+  and latency, z-score detection with floors and minimum counts, ongoing anomalies that resolve
+  themselves, webhook alerts (`alertMinSeverity` is new), optional explanations from an analysis
+  service such as `deployments/grok`, MongoDB storage with retention, and an Anomalies page in the
+  admin. `pkg/ai` is rewritten (COR-19): the old detector divided by zero deviations, flagged
+  every user agent as a bot, analysed no service, and computed latency percentiles from request
+  sizes. `ai.flushInterval`, which no longer applies, is removed.
 - WebAssembly plugins (`wasm`): sandboxed middleware in any language that compiles to wasm32, in
   the same phases, priorities and routes as Go plugins and working in the Docker image. A small
   JSON ABI (`odin_alloc`, `odin_handle`) lets a plugin answer the request or change its headers;

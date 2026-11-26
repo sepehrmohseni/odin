@@ -102,6 +102,8 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 		h.pluginHandler.RegisterPluginRoutes(protected)
 	}
 
+	h.registerAIRoutes(protected)
+
 	// Register middleware API routes if middleware handler is available
 	if h.middlewareAPIHandler != nil {
 		h.middlewareAPIHandler.RegisterMiddlewareAPIRoutes(protected)

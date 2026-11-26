@@ -10,6 +10,7 @@
     <div class="odin-nav-label">Traffic</div>
     <a href="/admin/monitoring"><i class="bi bi-activity"></i>Monitoring</a>
     <a href="/admin/traces"><i class="bi bi-list-columns-reverse"></i>Request log</a>
+    {{if aiEnabled}}<a href="/admin/anomalies"><i class="bi bi-exclamation-diamond"></i>Anomalies</a>{{end}}
     <div class="odin-nav-label">Configuration</div>
     <a href="/admin/services/new" data-nav="/admin/services/new"><i class="bi bi-plus-square"></i>Add service</a>
     <a href="/admin/middleware-chain"><i class="bi bi-layers"></i>Middleware</a>

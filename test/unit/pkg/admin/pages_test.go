@@ -3,11 +3,16 @@ package admin_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"odin/pkg/admin"
+	"odin/pkg/ai"
 	"odin/pkg/config"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -75,4 +80,22 @@ func TestDashboardListsServices(t *testing.T) {
 
 	rec = do(e, http.MethodGet, "/admin/services/orders", "", auth)
 	assert.Equal(t, http.StatusOK, rec.Code, "the edit link leads to a page")
+}
+
+// With anomaly detection on, the Anomalies page renders and the navigation links to it.
+func TestAnomaliesPage(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0o600))
+	e := echo.New()
+	h := admin.New(baseConfig(), cfgPath, quietLogger())
+	h.SetAnalyzer(ai.NewAnalyzer(ai.Options{}, quietLogger()))
+	t.Cleanup(func() { h.SetAnalyzer(nil) })
+	h.Register(e)
+
+	rec := do(e, http.MethodGet, "/admin/anomalies", "", map[string]string{"Authorization": basic("root", "s3cret-pass")})
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "<title>Anomalies - Odin Admin</title>")
+	assert.Contains(t, rec.Body.String(), "Every minute")
+	assert.Contains(t, rec.Body.String(), `href="/admin/anomalies"`)
 }

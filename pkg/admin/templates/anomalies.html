@@ -1,0 +1,180 @@
+{{define "anomalies.html"}}
+{{template "base" .}}
+{{end}}
+
+{{define "title"}}Anomalies - Odin Admin{{end}}
+
+{{define "head-extra"}}
+<style>
+  .odin-anomaly-detail td { background: var(--odin-surface-2); font-size: 0.8rem; }
+  .odin-anomaly-detail ul { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+  .odin-sev { text-transform: capitalize; }
+  .odin-sev.critical, .odin-sev.high { color: var(--odin-bad); background: var(--odin-bad-soft); border-color: transparent; }
+  .odin-sev.medium { color: var(--odin-warn); background: var(--odin-warn-soft); border-color: transparent; }
+  tr.closed td { opacity: 0.55; }
+</style>
+{{end}}
+
+{{define "content"}}
+<div class="odin-head">
+  <div>
+    <h1>Anomalies</h1>
+    <p>
+      Every {{.Every}}, each service's traffic, server error share and latency are compared
+      with what Odin has learned is normal for it; a window more than
+      {{.Settings.Threshold}} standard deviations away is an anomaly. A service needs
+      {{.Settings.MinSamples}} windows before it is judged.
+    </p>
+  </div>
+</div>
+
+<section class="odin-stats" aria-label="Summary" style="grid-template-columns: repeat(4, minmax(0, 1fr))">
+  <div class="odin-stat"><div class="label">Open</div><div class="value" id="st-open">—</div><div class="sub">not resolved</div></div>
+  <div class="odin-stat"><div class="label">High or critical</div><div class="value" id="st-high">—</div><div class="sub">open</div></div>
+  <div class="odin-stat"><div class="label">Recorded</div><div class="value" id="st-total">—</div><div class="sub">kept in memory, newest 500</div></div>
+  <div class="odin-stat"><div class="label">Services</div><div class="value" id="st-services">—</div><div class="sub" id="st-learning"></div></div>
+</section>
+
+<section class="odin-panel mb-3">
+  <header>
+    <div class="odin-filters">
+      <select class="form-select form-select-sm" id="f-open" aria-label="State">
+        <option value="1">Open</option>
+        <option value="">All</option>
+      </select>
+      <select class="form-select form-select-sm" id="f-sev" aria-label="Severity">
+        <option value="">Any severity</option>
+        <option value="medium">Medium and up</option>
+        <option value="high">High and up</option>
+        <option value="critical">Critical</option>
+      </select>
+      <select class="form-select form-select-sm" id="f-svc" aria-label="Service"><option value="">All services</option></select>
+    </div>
+    <span class="hint" id="count"></span>
+  </header>
+  <div class="table-responsive">
+    <table class="table odin-table">
+      <thead>
+        <tr><th>Severity</th><th>Service</th><th>What happened</th><th class="num">Since</th><th class="num">Lasted</th><th class="num">Score</th><th class="text-end"></th></tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="7" class="odin-empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="odin-panel">
+  <header><h2>Baselines</h2><span class="hint">what each service's normal looks like so far</span></header>
+  <div class="table-responsive">
+    <table class="table odin-table">
+      <thead>
+        <tr><th>Service</th><th>State</th><th class="num">Requests / s</th><th class="num">Server errors</th><th class="num">Latency</th><th class="num">Windows</th></tr>
+      </thead>
+      <tbody id="baselines"><tr><td colspan="6" class="odin-empty">No traffic yet.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+
+{{define "scripts"}}
+<script>
+  (function () {
+    var O = window.Odin, intervalMs = {{.Settings.Interval.Milliseconds}};
+    var fOpen = document.getElementById('f-open'), fSev = document.getElementById('f-sev'), fSvc = document.getElementById('f-svc');
+    var services = {}, expanded = {};
+    [fOpen, fSev, fSvc].forEach(function (el) { el.addEventListener('input', load); });
+
+    function lasted(a) {
+      var ms = a.windows * intervalMs;
+      return ms < 3600000 ? Math.round(ms / 60000) + ' min' : (ms / 3600000).toFixed(1) + ' h';
+    }
+
+    function row(a) {
+      var closed = a.resolved || a.falsePositive;
+      var state = a.falsePositive ? 'false positive' : a.resolved ? 'resolved' : '';
+      var detail = a.explanation || (a.suggestions && a.suggestions.length);
+      var html = '<tr class="' + (closed ? 'closed' : '') + '">' +
+        '<td><span class="odin-tag odin-sev ' + a.severity + '">' + a.severity + '</span></td>' +
+        '<td class="name">' + O.escapeHTML(a.service) + '</td>' +
+        '<td>' + O.escapeHTML(a.description) + (state ? ' <span class="odin-tag">' + state + '</span>' : '') +
+        (detail ? ' <button type="button" class="btn btn-link btn-sm p-0" data-expand="' + a.id + '">explanation</button>' : '') + '</td>' +
+        '<td class="num text-muted text-nowrap" title="' + O.escapeHTML(new Date(a.firstSeen).toString()) + '">' + O.relTime(a.firstSeen) + '</td>' +
+        '<td class="num text-muted">' + lasted(a) + '</td>' +
+        '<td class="num">' + Math.round(a.score) + '</td>' +
+        '<td class="text-end text-nowrap">' + (closed ? '' :
+          '<button type="button" class="btn btn-sm odin-btn-quiet" data-act="resolve" data-id="' + a.id + '">Resolve</button> ' +
+          '<button type="button" class="btn btn-sm odin-btn-quiet" data-act="false-positive" data-id="' + a.id + '">False positive</button>') +
+        '</td></tr>';
+      if (detail && expanded[a.id]) {
+        html += '<tr class="odin-anomaly-detail"><td></td><td colspan="6">' + O.escapeHTML(a.explanation || '') +
+          (a.suggestions && a.suggestions.length ? '<ul>' + a.suggestions.map(function (s) { return '<li>' + O.escapeHTML(s) + '</li>'; }).join('') + '</ul>' : '') +
+          '</td></tr>';
+      }
+      return html;
+    }
+
+    function load() {
+      var q = '?limit=200&open=' + fOpen.value + '&severity=' + encodeURIComponent(fSev.value) + '&service=' + encodeURIComponent(fSvc.value);
+      fetch('/admin/api/ai/anomalies' + q, { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : { anomalies: [] }; })
+        .then(function (d) {
+          var list = d.anomalies || [];
+          document.getElementById('count').textContent = list.length + ' shown';
+          document.getElementById('rows').innerHTML = list.length ? list.map(row).join('') :
+            '<tr><td colspan="7" class="odin-empty">' + (fOpen.value ? 'No open anomalies.' : 'No anomalies recorded yet.') + '</td></tr>';
+        });
+      fetch('/admin/api/ai/stats', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (s) {
+          if (!s) return;
+          var sev = s.openBySeverity || {};
+          document.getElementById('st-open').textContent = s.open;
+          document.getElementById('st-high').textContent = (sev.high || 0) + (sev.critical || 0);
+          document.getElementById('st-total').textContent = s.total;
+          document.getElementById('st-services').textContent = s.services;
+          document.getElementById('st-learning').textContent = s.learning ? s.learning + ' still learning' : 'all judged';
+        });
+      fetch('/admin/api/ai/baselines', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : { baselines: [] }; })
+        .then(function (d) {
+          var list = d.baselines || [];
+          list.forEach(function (b) {
+            if (!services[b.service]) {
+              services[b.service] = true;
+              var o = document.createElement('option');
+              o.value = o.textContent = b.service;
+              fSvc.appendChild(o);
+            }
+          });
+          if (!list.length) return;
+          document.getElementById('baselines').innerHTML = list.map(function (b) {
+            return '<tr><td class="name">' + O.escapeHTML(b.service) + '</td>' +
+              '<td>' + (b.ready ? '<span class="odin-tag ok">judged</span>' : '<span class="odin-tag">learning</span>') + '</td>' +
+              '<td class="num">' + b.requestRate.mean.toFixed(2) + ' <span class="text-muted">± ' + b.requestRate.stdDev.toFixed(2) + '</span></td>' +
+              '<td class="num">' + b.serverErrorPct.mean.toFixed(1) + '% <span class="text-muted">± ' + b.serverErrorPct.stdDev.toFixed(1) + '</span></td>' +
+              '<td class="num">' + O.fmtMs(b.latencyMs.mean) + ' <span class="text-muted">± ' + O.fmtMs(b.latencyMs.stdDev) + '</span></td>' +
+              '<td class="num text-muted">' + b.samples + '</td></tr>';
+          }).join('');
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+      var ex = e.target.closest('[data-expand]');
+      if (ex) {
+        var id = ex.getAttribute('data-expand');
+        expanded[id] = !expanded[id];
+        load();
+        return;
+      }
+      var b = e.target.closest('[data-act]');
+      if (!b) return;
+      b.disabled = true;
+      OdinAPI.post('/admin/api/ai/anomalies/' + encodeURIComponent(b.getAttribute('data-id')) + '/' + b.getAttribute('data-act'), {})
+        .then(load)
+        .catch(function (err) { showToast('Could not update: ' + err.message, 'danger'); b.disabled = false; });
+    });
+
+    load();
+    setInterval(function () { if (!document.hidden) load(); }, 10000);
+  })();
+</script>
+{{end}}

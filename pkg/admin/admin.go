@@ -3,6 +3,7 @@ package admin
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"odin/pkg/ai"
 	"odin/pkg/config"
 	"odin/pkg/plugins"
 	"os"
@@ -29,6 +30,7 @@ type AdminHandler struct {
 	sessions             *sessionStore
 	logins               *loginLimiter
 	allowedOrigins       map[string]bool // scheme://host, lower case
+	analyzer             *ai.Analyzer    // nil unless ai.enabled
 	cacheStore           interface{ Clear() }
 	pluginHandler        *PluginHandler
 	middlewareAPIHandler *MiddlewareAPIHandler

@@ -365,21 +365,34 @@ type MongoDBTLS struct {
 	KeyFile  string `yaml:"keyFile"`
 }
 
-// AIConfig represents AI-powered traffic analysis configuration
+// AIConfig configures traffic anomaly detection (see docs/observability.md).
 type AIConfig struct {
-	Enabled               bool              `yaml:"enabled"`
-	AnalysisInterval      time.Duration     `yaml:"analysisInterval"`
-	BaselineWindow        time.Duration     `yaml:"baselineWindow"`
-	AnomalyThreshold      float64           `yaml:"anomalyThreshold"` // Z-score threshold
-	MinSamplesForBaseline int               `yaml:"minSamplesForBaseline"`
-	UseGrokModel          bool              `yaml:"useGrokModel"`
-	GrokServiceURL        string            `yaml:"grokServiceUrl"`
-	GrokTimeout           time.Duration     `yaml:"grokTimeout"`
-	EnableAlerts          bool              `yaml:"enableAlerts"`
-	AlertWebhookURL       string            `yaml:"alertWebhookUrl"`
-	RetentionDays         int               `yaml:"retentionDays"`
-	FlushInterval         time.Duration     `yaml:"flushInterval"` // Traffic data flush interval
-	Tags                  map[string]string `yaml:"tags"`
+	// Learn each service's normal traffic and report anomalies (admin: Anomalies).
+	Enabled bool `yaml:"enabled"`
+	// Length of each analysed window (default 1m).
+	AnalysisInterval time.Duration `yaml:"analysisInterval"`
+	// Roughly how far back the baseline reaches (default 1h).
+	BaselineWindow time.Duration `yaml:"baselineWindow"`
+	// How many standard deviations from the baseline count as an anomaly (default 3).
+	AnomalyThreshold float64 `yaml:"anomalyThreshold"`
+	// Windows to learn from before anomalies are reported (default 10).
+	MinSamplesForBaseline int `yaml:"minSamplesForBaseline"`
+	// Ask the analysis service at grokServiceUrl to explain new anomalies.
+	UseGrokModel bool `yaml:"useGrokModel"`
+	// Base URL of the analysis service (POST /analyze), such as deployments/grok.
+	GrokServiceURL string `yaml:"grokServiceUrl"`
+	// Timeout for the analysis service (default 30s).
+	GrokTimeout time.Duration `yaml:"grokTimeout"`
+	// POST new anomalies to alertWebhookUrl.
+	EnableAlerts bool `yaml:"enableAlerts"`
+	// Webhook for anomaly alerts (JSON with a Slack-compatible "text").
+	AlertWebhookURL string `yaml:"alertWebhookUrl"`
+	// Lowest severity that is sent: low, medium (default), high or critical.
+	AlertMinSeverity string `yaml:"alertMinSeverity"`
+	// With MongoDB, how long anomalies are kept (default 30 days).
+	RetentionDays int `yaml:"retentionDays"`
+	// Added to every anomaly, for example the environment.
+	Tags map[string]string `yaml:"tags"`
 }
 
 type ServiceConfig struct {

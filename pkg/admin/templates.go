@@ -120,6 +120,7 @@ func parsePage(name string) (*pageTemplate, error) {
 		"demo":       DemoMode,
 		"openapiURL": func() string { return currentLinks().OpenAPI },
 		"metricsURL": func() string { return currentLinks().Metrics },
+		"aiEnabled":  aiOn.Load,
 		"hasHook": func(hooks []string, hook string) bool {
 			for _, h := range hooks {
 				if h == hook {

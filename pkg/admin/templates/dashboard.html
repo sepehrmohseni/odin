@@ -144,6 +144,12 @@
   </section>
 
   <div class="odin-grid" style="align-content: start">
+    {{if aiEnabled}}
+    <section class="odin-panel">
+      <header><h2>Open anomalies</h2><a class="hint" href="/admin/anomalies">All <i class="bi bi-arrow-right"></i></a></header>
+      <div class="body" id="anomaly-list"><span class="text-muted">None.</span></div>
+    </section>
+    {{end}}
     <section class="odin-panel">
       <header><h2>Responses</h2><span class="hint" id="resp-total"></span></header>
       <div class="body odin-bars" id="resp-bars"></div>
@@ -268,6 +274,25 @@
     }
 
     O.pollMetrics(render, 4000);
+
+    var anomalyList = document.getElementById('anomaly-list');
+    function loadAnomalies() {
+      if (!anomalyList || document.hidden) return;
+      fetch('/admin/api/ai/anomalies?open=1&limit=5', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d) return;
+          var list = d.anomalies || [];
+          anomalyList.innerHTML = list.length ? list.map(function (a) {
+            var cls = a.severity === 'critical' || a.severity === 'high' ? 'bad' : 'warn';
+            return '<div class="d-flex gap-2 py-1"><span class="odin-dot ' + cls + '" style="margin-top:.45rem"></span>' +
+              '<div><strong>' + O.escapeHTML(a.service) + '</strong> ' + O.escapeHTML(a.description) +
+              ' <span class="text-muted" style="font-size:.75rem">' + O.relTime(a.firstSeen) + '</span></div></div>';
+          }).join('') : '<span class="text-muted">None.</span>';
+        });
+    }
+    loadAnomalies();
+    setInterval(loadAnomalies, 10000);
   })();
 </script>
 {{end}}

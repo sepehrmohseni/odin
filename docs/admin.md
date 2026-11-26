@@ -39,6 +39,7 @@ admin:
 | --- | --- |
 | Dashboard | Live totals (requests per second, success rate, latency, 4xx and 5xx), and every service with its route, targets and their health, policies (JWT, rate limit, cache, timeout) and traffic; a curl command to copy for each, recent requests, response classes and upstream health |
 | Monitoring | Requests over the last five minutes by status class, latency percentiles, per-service traffic and error rates, and the state of every health-checked target |
+| Anomalies | With `ai.enabled`: open and past [traffic anomalies](observability.md#traffic-anomaly-detection) per service, with explanations when an analysis service is set, and the learned baselines; resolve or mark false positives |
 | Request log | The last 100 requests, filterable by path, service, status class and duration, each copyable as a curl command |
 | Add service, edit | Name, base path, targets, authentication, load balancing, timeout and retries |
 | Settings | Server, logging, rate-limit, cache, monitoring and tracing settings; config export and backups |

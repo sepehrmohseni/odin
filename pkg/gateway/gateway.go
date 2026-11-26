@@ -12,6 +12,7 @@ import (
 
 	"odin/pkg/admin"
 	"odin/pkg/aggregator"
+	"odin/pkg/ai"
 	"odin/pkg/auth"
 	"odin/pkg/cache"
 	"odin/pkg/config"
@@ -53,6 +54,7 @@ type Gateway struct {
 	alertManager    *health.AlertManager
 	meshManager     *servicemesh.Manager
 	mongoRepo       mongodb.Repository
+	analyzer        *ai.Analyzer
 }
 
 func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway, error) {
@@ -245,6 +247,15 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 
 	// WebAssembly plugins join the same pipeline. A plugin that fails to load stops startup:
 	// skipping, say, an authentication plugin would leave its routes open.
+	// Traffic anomaly detection learns from every service request (see pkg/ai).
+	var analyzer *ai.Analyzer
+	if cfg.AI.Enabled {
+		analyzer = newAnalyzer(cfg.AI, mongoRepo, logger)
+		e.Use(ai.Middleware(analyzer))
+		adminHandler.SetAnalyzer(analyzer)
+		analyzer.Start()
+	}
+
 	var wasmRuntime io.Closer
 	if cfg.WASM.Enabled {
 		if wasmRuntime, err = loadWASMPlugins(cfg.WASM, pluginManager, logger); err != nil {
@@ -384,6 +395,10 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	}
 	if wasmRuntime != nil {
 		gateway.closers = append(gateway.closers, wasmRuntime)
+	}
+	if analyzer != nil {
+		gateway.closers = append(gateway.closers, analyzer)
+		gateway.analyzer = analyzer
 	}
 
 	// Setup protocol-specific proxies
@@ -980,3 +995,45 @@ func loadWASMPlugins(cfg config.WASMConfig, pm *plugins.PluginManager, logger *l
 	}
 	return rt, nil
 }
+
+// newAnalyzer builds the anomaly detector with its optional webhook, analysis service and
+// MongoDB storage.
+func newAnalyzer(cfg config.AIConfig, mongoRepo mongodb.Repository, logger *logrus.Logger) *ai.Analyzer {
+	a := ai.NewAnalyzer(ai.Options{
+		Interval:   cfg.AnalysisInterval,
+		Window:     cfg.BaselineWindow,
+		Threshold:  cfg.AnomalyThreshold,
+		MinSamples: cfg.MinSamplesForBaseline,
+		Tags:       cfg.Tags,
+	}, logger)
+	if cfg.EnableAlerts && cfg.AlertWebhookURL != "" {
+		a.SetNotifier(&ai.Webhook{URL: cfg.AlertWebhookURL, MinSeverity: cfg.AlertMinSeverity})
+	}
+	if cfg.UseGrokModel && cfg.GrokServiceURL != "" {
+		timeout := cfg.GrokTimeout
+		if timeout <= 0 {
+			timeout = 30 * time.Second
+		}
+		a.SetExplainer(&ai.AnalysisService{URL: cfg.GrokServiceURL, Client: &http.Client{Timeout: timeout}})
+	}
+	if mongoRepo != nil {
+		if db := mongoRepo.GetDatabase(); db != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			store, err := ai.NewMongoStore(ctx, db, time.Duration(cfg.RetentionDays)*24*time.Hour)
+			if err != nil {
+				logger.WithError(err).Warn("Anomalies will not be stored in MongoDB")
+			} else {
+				a.SetStore(store)
+				if recent, err := store.Recent(ctx, 200); err == nil {
+					a.Restore(recent)
+				}
+			}
+		}
+	}
+	logger.WithField("interval", a.Settings().Interval).Info("Traffic anomaly detection enabled")
+	return a
+}
+
+// Analyzer returns the traffic anomaly detector, or nil when ai.enabled is false.
+func (g *Gateway) Analyzer() *ai.Analyzer { return g.analyzer }

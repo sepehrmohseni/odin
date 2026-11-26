@@ -92,7 +92,7 @@ services; response caching that respects `Cache-Control`.
 **Observability**
 
 Prometheus metrics per service, OpenTelemetry traces with context propagation, structured
-access logs, and `/health`, `/ready` and `/live`.
+access logs, health endpoints, and per-service traffic anomaly detection with alerts.
 </div>
 <div markdown>
 **Plugins**
