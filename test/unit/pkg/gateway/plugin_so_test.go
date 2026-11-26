@@ -77,3 +77,28 @@ func TestUploadedStyleMiddlewarePluginRunsOnTheRequestPath(t *testing.T) {
 	// Static validation accepts the same binary without running it.
 	assert.NoError(t, plugins.NewPluginValidator().ValidatePlugin(so, "api-key"))
 }
+
+// The shipped example exports `var Middleware` and is configured through Initialize; it must
+// build with examples/middleware-plugins/build.sh's flags and enforce its keys once enabled.
+func TestExampleAPIKeyPluginLoadsAndEnforces(t *testing.T) {
+	so := buildSO(t, "../../../../examples/middleware-plugins/api-key-auth")
+
+	be := newBackend(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	gw, h := pipelineGateway(t, &config.Config{
+		Plugins:  config.PluginsConfig{Directory: filepath.Dir(so)},
+		Services: []config.ServiceConfig{{Name: "api", BasePath: "/api", Targets: []string{be.URL}}},
+	})
+
+	require.NoError(t, plugins.NewPluginValidator().ValidatePlugin(so, "api-key-auth"))
+	require.NoError(t, gw.Plugins().LoadRecord(&plugins.PluginRecord{
+		Name:       "api-key-auth",
+		BinaryPath: so,
+		PluginType: "middleware",
+		Config:     map[string]interface{}{"keys": []interface{}{"k1", "k2"}},
+		AppliedTo:  []string{"/api/*"},
+		Phase:      "pre-auth",
+	}))
+
+	assert.Equal(t, http.StatusUnauthorized, serve(h, "GET", "/api/x", nil, map[string]string{"X-API-Key": "nope"}).Code)
+	assert.Equal(t, http.StatusOK, serve(h, "GET", "/api/x", nil, map[string]string{"X-API-Key": "k2"}).Code)
+}

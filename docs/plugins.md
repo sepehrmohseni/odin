@@ -49,7 +49,9 @@ func New(config map[string]interface{}) (plugins.Middleware, error) {
 
 Build it inside a checkout of the same Odin version: `go build -buildmode=plugin -o api-key.so
 ./path/to/plugin`. Exporting `var Middleware plugins.Middleware` instead of `New` also works;
-then `Initialize` receives the configuration.
+then `Initialize` receives the configuration. Three examples (API keys, request logging, header
+rewriting) are in `examples/middleware-plugins`; `examples/middleware-plugins/build.sh` builds
+them.
 
 ### Phases
 
