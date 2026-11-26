@@ -5,7 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -38,7 +43,7 @@ type NewmanRunOptions struct {
 	BailOnError      bool              // Stop on first error
 	SuppressExitCode bool              // Don't exit with error code
 	Color            bool              // Enable colored output
-	NoInsecureSSL    bool              // Don't allow insecure SSL
+	Insecure         bool              // Skip TLS verification (newman --insecure); off by default
 	Reporters        []string          // Reporter types (cli, json, html)
 	ReporterOptions  map[string]string // Reporter-specific options
 }
@@ -80,36 +85,50 @@ func (n *NewmanRunner) RunCollection(ctx context.Context, collectionID, serviceN
 		RunAt:        startTime,
 	}
 
-	// Build Newman command
-	args, err := n.buildNewmanArgs(collection, options)
+	// The collection, the environment values and the report live in a private temporary
+	// directory. (The collection used to be "-", which Newman does not read, environment values
+	// were on the command line for any local user to see, and the JSON report, which Newman
+	// writes to a file, was looked for on standard output.)
+	dir, err := os.MkdirTemp("", "odin-newman-")
 	if err != nil {
 		result.Status = "failed"
 		result.Error = err.Error()
-		return result, fmt.Errorf("failed to build newman args: %w", err)
+		return result, fmt.Errorf("newman: %w", err)
+	}
+	defer os.RemoveAll(dir)
+	files, err := writeNewmanFiles(dir, collection, options)
+	if err != nil {
+		result.Status = "failed"
+		result.Error = err.Error()
+		return result, fmt.Errorf("newman: %w", err)
 	}
 
-	// Execute Newman
-	output, exitCode, err := n.executeNewman(ctx, args)
+	runCtx, cancel := context.WithTimeout(ctx, runTimeout(options))
+	defer cancel()
+	output, exitCode, err := n.executeNewman(runCtx, n.buildNewmanArgs(files, options))
 	duration := time.Since(startTime)
 	result.Duration = duration.Milliseconds()
 
-	if err != nil {
+	switch {
+	case err != nil:
 		result.Status = "failed"
 		result.Error = err.Error()
 		logger.WithError(err).Error("Newman execution failed")
-	} else if exitCode != 0 {
+	case exitCode != 0:
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("newman exited with code %d", exitCode)
 		logger.WithField("exit_code", exitCode).Warn("Newman test failures detected")
-	} else {
+	default:
 		result.Status = "passed"
 		logger.Info("Newman tests passed")
 	}
 
-	// Parse Newman output
-	if err := n.parseNewmanOutput(output, result); err != nil {
+	report, readErr := os.ReadFile(files.report)
+	if readErr != nil {
+		report = output // no report: keep what Newman printed
+	}
+	if err := n.parseNewmanOutput(report, result); err != nil {
 		logger.WithError(err).Warn("Failed to parse Newman output")
-		// Don't fail the whole operation, just log warning
 	}
 
 	// Save result
@@ -128,84 +147,109 @@ func (n *NewmanRunner) RunCollection(ctx context.Context, collectionID, serviceN
 	return result, nil
 }
 
-// buildNewmanArgs builds Newman CLI arguments
-func (n *NewmanRunner) buildNewmanArgs(collection *PostmanCollection, options *NewmanRunOptions) ([]string, error) {
-	args := []string{"run"}
+type newmanFiles struct {
+	collection, environment, report string
+}
 
-	// Serialize collection to temp file or use stdin
-	// For simplicity, we'll use stdin with JSON
-	collectionJSON, err := json.Marshal(collection)
+// writeNewmanFiles writes the collection and, if there are any, the environment values in
+// Postman's environment format, readable only by this user.
+func writeNewmanFiles(dir string, collection *PostmanCollection, options *NewmanRunOptions) (newmanFiles, error) {
+	f := newmanFiles{
+		collection: filepath.Join(dir, "collection.json"),
+		report:     filepath.Join(dir, "report.json"),
+	}
+	data, err := json.Marshal(collection)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal collection: %w", err)
+		return f, fmt.Errorf("encoding the collection: %w", err)
 	}
-
-	// Save to temp file (newman needs a file)
-	// In production, you'd use a proper temp file
-	args = append(args, "-")
-
-	// Add options
-	if options != nil {
-		if options.IterationCount > 0 {
-			args = append(args, "-n", fmt.Sprintf("%d", options.IterationCount))
-		}
-
-		if options.DelayRequest > 0 {
-			args = append(args, "--delay-request", fmt.Sprintf("%d", options.DelayRequest))
-		}
-
-		if options.Timeout > 0 {
-			args = append(args, "--timeout", fmt.Sprintf("%d", options.Timeout))
-		}
-
-		if options.TimeoutRequest > 0 {
-			args = append(args, "--timeout-request", fmt.Sprintf("%d", options.TimeoutRequest))
-		}
-
-		if options.TimeoutScript > 0 {
-			args = append(args, "--timeout-script", fmt.Sprintf("%d", options.TimeoutScript))
-		}
-
-		if options.BailOnError {
-			args = append(args, "--bail")
-		}
-
-		if options.SuppressExitCode {
-			args = append(args, "--suppress-exit-code")
-		}
-
-		if options.NoInsecureSSL {
-			args = append(args, "--insecure")
-		}
-
-		if !options.Color {
-			args = append(args, "--no-color")
-		}
-
-		// Reporters
-		if len(options.Reporters) > 0 {
-			for _, reporter := range options.Reporters {
-				args = append(args, "-r", reporter)
-			}
-		} else {
-			// Default to JSON reporter for parsing
-			args = append(args, "-r", "json")
-		}
-
-		// Environment variables
-		if len(options.EnvironmentVars) > 0 {
-			for key, value := range options.EnvironmentVars {
-				args = append(args, "--env-var", fmt.Sprintf("%s=%s", key, value))
-			}
-		}
-	} else {
-		// Default reporter
-		args = append(args, "-r", "json")
+	if err := os.WriteFile(f.collection, data, 0o600); err != nil {
+		return f, err
 	}
+	if options != nil && len(options.EnvironmentVars) > 0 {
+		type value struct {
+			Key     string `json:"key"`
+			Value   string `json:"value"`
+			Enabled bool   `json:"enabled"`
+		}
+		env := struct {
+			Name   string  `json:"name"`
+			Values []value `json:"values"`
+		}{Name: "odin"}
+		keys := make([]string, 0, len(options.EnvironmentVars))
+		for k := range options.EnvironmentVars {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			env.Values = append(env.Values, value{Key: k, Value: options.EnvironmentVars[k], Enabled: true})
+		}
+		data, err := json.Marshal(env)
+		if err != nil {
+			return f, err
+		}
+		f.environment = filepath.Join(dir, "environment.json")
+		if err := os.WriteFile(f.environment, data, 0o600); err != nil {
+			return f, err
+		}
+	}
+	return f, nil
+}
 
-	// Store collection JSON for use in execution
-	n.logger.WithField("collection_size", len(collectionJSON)).Debug("Collection prepared for Newman")
+// runTimeout bounds a whole run: Newman's own --timeout plus a minute, or 15 minutes.
+func runTimeout(options *NewmanRunOptions) time.Duration {
+	if options != nil && options.Timeout > 0 {
+		return time.Duration(options.Timeout)*time.Millisecond + time.Minute
+	}
+	return 15 * time.Minute
+}
 
-	return args, nil
+// buildNewmanArgs builds the Newman command line. The JSON reporter always runs, exporting to
+// files.report, so the result can be read.
+func (n *NewmanRunner) buildNewmanArgs(files newmanFiles, options *NewmanRunOptions) []string {
+	if options == nil {
+		options = &NewmanRunOptions{}
+	}
+	args := []string{"run", files.collection}
+	if files.environment != "" {
+		args = append(args, "--environment", files.environment)
+	}
+	if options.IterationCount > 0 {
+		args = append(args, "-n", strconv.Itoa(options.IterationCount))
+	}
+	if options.DelayRequest > 0 {
+		args = append(args, "--delay-request", strconv.Itoa(options.DelayRequest))
+	}
+	if options.Timeout > 0 {
+		args = append(args, "--timeout", strconv.Itoa(options.Timeout))
+	}
+	if options.TimeoutRequest > 0 {
+		args = append(args, "--timeout-request", strconv.Itoa(options.TimeoutRequest))
+	}
+	if options.TimeoutScript > 0 {
+		args = append(args, "--timeout-script", strconv.Itoa(options.TimeoutScript))
+	}
+	if options.BailOnError {
+		args = append(args, "--bail")
+	}
+	if options.SuppressExitCode {
+		args = append(args, "--suppress-exit-code")
+	}
+	// Only when asked for: the old option NoInsecureSSL ("don't allow insecure") added
+	// --insecure, turning certificate checks off (AUDIT SEC-26).
+	if options.Insecure {
+		args = append(args, "--insecure")
+	}
+	if !options.Color {
+		args = append(args, "--no-color")
+	}
+	reporters := []string{"json"}
+	for _, r := range options.Reporters {
+		if r != "json" && r != "" {
+			reporters = append(reporters, r)
+		}
+	}
+	args = append(args, "-r", strings.Join(reporters, ","), "--reporter-json-export", files.report)
+	return args
 }
 
 // executeNewman executes the Newman CLI command

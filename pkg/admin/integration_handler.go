@@ -137,7 +137,6 @@ func (h *IntegrationHandler) RegisterRoutes(g *echo.Group) {
 
 	// Testing
 	integration.POST("/test/:collectionId", h.RunTests)
-	integration.GET("/test/results", h.GetTestResults)
 	integration.GET("/test/results/:collectionId", h.GetCollectionTestResults)
 	integration.GET("/test/stats/:collectionId", h.GetTestStats)
 }
@@ -736,16 +735,6 @@ func (h *IntegrationHandler) RunTests(c echo.Context) error {
 
 	return c.JSON(http.StatusAccepted, map[string]string{
 		"message": "tests started",
-	})
-}
-
-// GetTestResults retrieves all test results
-func (h *IntegrationHandler) GetTestResults(c echo.Context) error {
-	// Get all test results (would need a repository method for this)
-	// For now, return empty array
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"results": []interface{}{},
-		"count":   0,
 	})
 }
 

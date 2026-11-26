@@ -71,6 +71,12 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   running chain (they only changed the database record) and accept only the pipeline's phases;
   the API works without MongoDB. The unimplemented "compile" endpoint and the bulk
   enable/disable endpoints, which only flipped database flags, are removed (MNT-03).
+- Postman's Newman test runner works (SEC-26): it passed "-" as the collection, which Newman
+  does not read, looked for the JSON report on standard output instead of its file, added
+  `--insecure` when told not to allow insecure TLS (the option is now `Insecure`), and put
+  environment values on the command line. The collection, environment and report now go to a
+  private temporary directory, and a run has an overall time limit. The stub
+  `GET /admin/api/integrations/postman/test/results`, which always answered an empty list, is removed.
 - Unknown configuration keys are logged as warnings with their file and line; they were ignored
   silently, so a misspelt key did nothing without notice (COR-24). The example configs that
   used keys which do not exist are corrected, and two examples of a `routes:` file format that

@@ -54,7 +54,6 @@ more.
 
 | Item | Finding | Effort |
 | --- | --- | --- |
-| Newman runner: temp file, JSON reporter, correct TLS flag, timeouts | [SEC-26](docs/AUDIT.md#security) | S |
 | Remove the committed sample JWTs; generate tokens at test time | [SEC-27](docs/AUDIT.md#security) | S |
 | Records: COR-28 (fixed by the OpenAPI rewrite), "What works today" | — | S |
 | Demo: retake the screenshots with the Anomalies page | — | S |
