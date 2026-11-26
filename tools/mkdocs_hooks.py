@@ -1,8 +1,8 @@
 """MkDocs hooks for the Odin documentation site (see mkdocs.yml).
 
 - Publishes ROADMAP.md, CHANGELOG.md and CONTRIBUTING.md from the repository root as pages.
-- Rewrites links written for browsing the repository on GitHub: a link to a published page
-  stays on the site; a link to any other repository file goes to that file on GitHub. Broken
+- Rewrites links written for browsing the repository on GitHub: a link to a published page or
+  file stays on the site; a link to any other repository file goes to that file on GitHub. Broken
   links are still reported, and fail the strict build.
 """
 
@@ -33,7 +33,9 @@ def on_page_markdown(markdown, page, config, files):
     src = page.file.src_uri
     # Where the page lives in the repository, to resolve its relative links.
     repo_path = next((k for k, v in ROOT_PAGES.items() if v == src), "docs/" + src)
-    published = {f.src_uri for f in files.documentation_pages()}
+    # Every file the site publishes (pages, images, other assets), so a relative link to an
+    # image stays on the site instead of going to GitHub.
+    published = {f.src_uri for f in files if f.inclusion.is_included()}
 
     def rewrite(match):
         target = match.group(2)
