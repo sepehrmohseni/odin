@@ -137,6 +137,7 @@ type Analyzer struct {
 	ongoing   map[string]*Anomaly // service/type -> unresolved anomaly
 	stop      chan struct{}
 	done      chan struct{}
+	saves     chan Anomaly // to the store, in order (see persistLocked)
 }
 
 // NewAnalyzer creates an analyzer; Start begins the windows.
@@ -171,7 +172,11 @@ func NewAnalyzer(opts Options, logger *logrus.Logger) *Analyzer {
 
 // SetStore persists anomalies (MongoDB); SetNotifier sends them (webhook); SetExplainer has them
 // explained (analysis service). Call before Start.
-func (a *Analyzer) SetStore(s Store)         { a.store = s }
+func (a *Analyzer) SetStore(s Store) {
+	a.store = s
+	a.saves = make(chan Anomaly, 1024)
+	go a.saveLoop()
+}
 func (a *Analyzer) SetNotifier(n Notifier)   { a.notifier = n }
 func (a *Analyzer) SetExplainer(e Explainer) { a.explainer = e }
 
@@ -249,7 +254,6 @@ func (a *Analyzer) Analyze() []*Anomaly {
 	}
 
 	var found []*Anomaly
-	var resolved []Anomaly
 	names := make([]string, 0, len(windows))
 	for name := range windows {
 		names = append(names, name)
@@ -287,7 +291,7 @@ func (a *Analyzer) Analyze() []*Anomaly {
 			if an.Service == name && !active[an.Type] {
 				an.Resolved = true
 				delete(a.ongoing, key)
-				resolved = append(resolved, *an)
+				a.persistLocked(an)
 			}
 		}
 
@@ -313,17 +317,6 @@ func (a *Analyzer) Analyze() []*Anomaly {
 		if an.Windows == 1 {
 			a.publish(an)
 		}
-	}
-	if a.store != nil && len(resolved) > 0 {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			for i := range resolved {
-				if err := a.store.SaveAnomaly(ctx, &resolved[i]); err != nil {
-					a.logger.WithError(err).Warn("Failed to save a resolved anomaly")
-				}
-			}
-		}()
 	}
 	return found
 }
@@ -467,11 +460,11 @@ func (a *Analyzer) publish(an *Anomaly) {
 				a.mu.Unlock()
 			}
 		}
-		if a.store != nil {
-			if err := a.store.SaveAnomaly(ctx, &snapshot); err != nil {
-				a.logger.WithError(err).Warn("Failed to save anomaly")
-			}
-		}
+		// The state now, not at detection: the anomaly may have been extended or resolved
+		// while the explanation was being written.
+		a.mu.Lock()
+		a.persistLocked(an)
+		a.mu.Unlock()
 		if a.notifier != nil {
 			if err := a.notifier.Notify(ctx, &snapshot); err != nil {
 				a.logger.WithError(err).Warn("Failed to send anomaly alert")
@@ -525,14 +518,7 @@ func (a *Analyzer) Mark(id string, falsePositive bool) bool {
 				delete(a.ongoing, key)
 			}
 		}
-		if a.store != nil {
-			cp := *an
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_ = a.store.SaveAnomaly(ctx, &cp)
-			}()
-		}
+		a.persistLocked(an)
 		return true
 	}
 	return false
@@ -583,4 +569,29 @@ func newID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// persistLocked queues the anomaly's current state for the store; callers hold a.mu. One
+// goroutine saves the queue in order, so the last save of an anomaly is its latest state. (The
+// first save used to run in its own goroutine, after an explanation that can take seconds, and
+// could overwrite a resolution saved in the meantime.)
+func (a *Analyzer) persistLocked(an *Anomaly) {
+	if a.saves == nil {
+		return
+	}
+	select {
+	case a.saves <- *an:
+	default:
+		a.logger.Warn("Anomaly store is behind; dropping an update")
+	}
+}
+
+func (a *Analyzer) saveLoop() {
+	for an := range a.saves {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := a.store.SaveAnomaly(ctx, &an); err != nil {
+			a.logger.WithError(err).Warn("Failed to save anomaly")
+		}
+		cancel()
+	}
 }
