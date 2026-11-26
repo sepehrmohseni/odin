@@ -5,53 +5,50 @@ metadata:
   labels:
     {{- include "odin.labels" . | nindent 4 }}
 data:
+  # Odin's config schema (see docs/configuration.md). Secrets are not here: the JWT secret and
+  # the admin password come from the chart's Secret through environment variables.
   config.yaml: |
-    gateway:
+    server:
       port: {{ .Values.config.gateway.port }}
       readTimeout: {{ .Values.config.gateway.readTimeout }}
       writeTimeout: {{ .Values.config.gateway.writeTimeout }}
       idleTimeout: {{ .Values.config.gateway.idleTimeout }}
-    
+      {{- with .Values.config.gateway.trustedProxies }}
+      trustedProxies:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+    logging:
+      level: {{ .Values.config.logging.level }}
+      json: {{ eq .Values.config.logging.format "json" }}
+
+    monitoring:
+      enabled: {{ .Values.monitoring.enabled }}
+      path: /metrics
+
     admin:
       enabled: {{ .Values.config.admin.enabled }}
-      port: {{ .Values.config.admin.port }}
-      username: {{ .Values.config.admin.username }}
-      password: {{ .Values.config.admin.password }}
-    
+      username: {{ .Values.config.admin.username | quote }}
+
     auth:
       accessTokenTTL: {{ .Values.config.auth.accessTokenTTL }}
       refreshTokenTTL: {{ .Values.config.auth.refreshTokenTTL }}
-      {{- if .Values.config.auth.oauth2.enabled }}
-      oauth2:
-        enabled: true
-        providers:
-          {{- toYaml .Values.config.auth.oauth2.providers | nindent 10 }}
-      {{- end }}
-    
-    circuitBreaker:
-      maxRequests: {{ .Values.config.circuitBreaker.maxRequests }}
-      interval: {{ .Values.config.circuitBreaker.interval }}
-      timeout: {{ .Values.config.circuitBreaker.timeout }}
-      failureRatio: {{ .Values.config.circuitBreaker.failureRatio }}
-      minRequests: {{ .Values.config.circuitBreaker.minRequests }}
-    
-    {{- if .Values.config.websocket.enabled }}
-    websocket:
-      enabled: true
-      readBufferSize: {{ .Values.config.websocket.readBufferSize }}
-      writeBufferSize: {{ .Values.config.websocket.writeBufferSize }}
-      handshakeTimeout: {{ .Values.config.websocket.handshakeTimeout }}
-      readTimeout: {{ .Values.config.websocket.readTimeout }}
-      writeTimeout: {{ .Values.config.websocket.writeTimeout }}
-      pingPeriod: {{ .Values.config.websocket.pingPeriod }}
-      maxMessageSize: {{ .Values.config.websocket.maxMessageSize }}
-      enableCompression: {{ .Values.config.websocket.enableCompression }}
+      ignorePathRegexes:
+        - ^/health$
+        - ^/ready$
+        - ^/live$
+        - ^/metrics$
+
+    {{- with .Values.config.rateLimit }}
+    rateLimit:
+      {{- toYaml . | nindent 6 }}
     {{- end }}
-    
-    logging:
-      level: {{ .Values.config.logging.level }}
-      format: {{ .Values.config.logging.format }}
-  
+
+    {{- with .Values.config.cache }}
+    cache:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+
   services.yaml: |
     services:
       {{- toYaml .Values.services | nindent 6 }}

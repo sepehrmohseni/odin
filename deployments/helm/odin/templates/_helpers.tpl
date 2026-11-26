@@ -58,3 +58,10 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Name of the Secret holding jwt-secret and admin-password: the chart's own, or an existing one.
+*/}}
+{{- define "odin.secretName" -}}
+{{- default (printf "%s-secrets" (include "odin.fullname" .)) .Values.secrets.existingSecret }}
+{{- end }}

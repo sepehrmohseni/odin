@@ -1,94 +1,43 @@
-# Odin API Gateway Helm Chart
+# Odin Helm chart
 
-This Helm chart deploys Odin API Gateway on a Kubernetes cluster.
-
-## Prerequisites
-
-- Kubernetes 1.19+
-- Helm 3.0+
-
-## Installation
-
-### Add Helm Repository (if available)
+Deploys the Odin API Gateway: a Deployment running the image as uid 65532 with a read-only root
+filesystem, a Service, an optional Ingress, HPA and ServiceMonitor, a ConfigMap rendered into
+Odin's config schema, and a Secret for the JWT secret and admin password.
 
 ```bash
-helm repo add odin https://charts.odin-gateway.io
-helm repo update
+helm install odin deployments/helm/odin \
+  --set secrets.jwtSecret="$(openssl rand -hex 32)" \
+  --set-json 'services=[{"name":"api","basePath":"/api","targets":["http://api.default.svc:80"]}]'
 ```
 
-### Install from Local Chart
+With the admin interface:
 
 ```bash
-# Clone the repository
-git clone https://github.com/sepehr-mohseni/odin.git
-cd odin/deployments/helm
-
-# Install the chart
-helm install my-odin odin/
+helm install odin deployments/helm/odin \
+  --set config.admin.enabled=true \
+  --set secrets.adminPassword="$(openssl rand -base64 18)" \
+  --set secrets.jwtSecret="$(openssl rand -hex 32)"
+kubectl port-forward svc/odin 8080:8080   # then open http://localhost:8080/admin
 ```
 
-### Install with Custom Values
+## Values
 
-```bash
-helm install my-odin odin/ -f values-production.yaml
-```
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `image.repository` / `image.tag` | `ghcr.io/sepehrmohseni/odin` / appVersion | Image to run |
+| `config.gateway.port` | `8080` | Listen port (also the Service target) |
+| `config.gateway.readTimeout`, `writeTimeout`, `idleTimeout` | `30s`, `30s`, `120s` | Server timeouts |
+| `config.gateway.trustedProxies` | `[]` | CIDRs whose `X-Forwarded-For` is trusted (your ingress controller) |
+| `config.admin.enabled` / `username` | `false` / `admin` | Admin interface |
+| `config.logging.level` / `format` | `info` / `json` | Logging |
+| `config.rateLimit`, `config.cache` | `{}` | Copied into config.yaml as they are (see docs/configuration.md) |
+| `services` | `[]` | Services in Odin's format, rendered into services.yaml |
+| `secrets.jwtSecret`, `secrets.adminPassword` | empty | Stored in the chart's Secret |
+| `secrets.existingSecret` | empty | Use your own Secret with keys `jwt-secret` and `admin-password` |
+| `monitoring.serviceMonitor.enabled` | `false` | Prometheus Operator ServiceMonitor |
 
-## Configuration
+Pods restart when the ConfigMap or Secret changes (checksum annotations).
 
-The following table lists the configurable parameters and their default values.
-
-| Parameter                       | Description              | Default        |
-| ------------------------------- | ------------------------ | -------------- |
-| `replicaCount`                  | Number of replicas       | `2`            |
-| `image.repository`              | Image repository         | `odin-gateway` |
-| `image.tag`                     | Image tag                | `latest`       |
-| `service.type`                  | Kubernetes service type  | `ClusterIP`    |
-| `service.port`                  | Service port             | `8080`         |
-| `ingress.enabled`               | Enable ingress           | `false`        |
-| `config.auth.jwtSecret`         | JWT secret key           | `""`           |
-| `config.circuitBreaker.enabled` | Enable circuit breaker   | `true`         |
-| `config.websocket.enabled`      | Enable WebSocket support | `true`         |
-| `redis.enabled`                 | Enable Redis dependency  | `true`         |
-
-## Examples
-
-### Basic Installation
-
-```bash
-helm install odin odin/ \
-  --set config.auth.jwtSecret="your-secret-key" \
-  --set ingress.enabled=true \
-  --set ingress.hosts[0].host="api.example.com"
-```
-
-### Production Installation with OAuth2
-
-```bash
-helm install odin odin/ \
-  --set replicaCount=3 \
-  --set config.auth.jwtSecret="your-secret-key" \
-  --set config.auth.oauth2.enabled=true \
-  --set secrets.oauth2ClientSecrets.google="google-client-secret" \
-  --set ingress.enabled=true \
-  --set autoscaling.enabled=true
-```
-
-### With Monitoring
-
-```bash
-helm install odin odin/ \
-  --set monitoring.serviceMonitor.enabled=true \
-  --set prometheus.enabled=true
-```
-
-## Upgrading
-
-```bash
-helm upgrade my-odin odin/
-```
-
-## Uninstalling
-
-```bash
-helm uninstall my-odin
-```
+Chart 0.2.0 replaces 0.1.0, which did not render (`templates/service.yaml` was not valid
+template syntax). Its admin port and Redis/Prometheus dependencies are gone, and
+`config.admin.password` moved to `secrets.adminPassword`.

@@ -2,9 +2,10 @@
 replicaCount: 2
 
 image:
-  repository: odin-gateway
+  repository: ghcr.io/sepehrmohseni/odin
   pullPolicy: IfNotPresent
-  tag: 'latest'
+  # Defaults to the chart's appVersion.
+  tag: ''
 
 imagePullSecrets: []
 nameOverride: ''
@@ -18,20 +19,23 @@ serviceAccount:
 podAnnotations: {}
 
 podSecurityContext:
-  fsGroup: 2000
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
+  allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
-  runAsUser: 1000
+  runAsUser: 65532
+  runAsGroup: 65532
 
 service:
   type: ClusterIP
   port: 8080
-  adminPort: 8081
 
 ingress:
   enabled: false
@@ -64,66 +68,37 @@ tolerations: []
 
 affinity: {}
 
+# Rendered into Odin's config.yaml by templates/configmap.yaml.
 config:
   gateway:
     port: 8080
     readTimeout: 30s
     writeTimeout: 30s
-    idleTimeout: 60s
+    idleTimeout: 120s
+    # CIDRs of load balancers / ingress controllers whose X-Forwarded-For is trusted.
+    trustedProxies: []
 
+  # The admin interface is off by default. When enabling it, set secrets.adminPassword (or
+  # provide admin-password in secrets.existingSecret); otherwise a random password is logged.
   admin:
-    enabled: true
-    port: 8081
+    enabled: false
     username: admin
-    password: admin123
 
   auth:
-    jwtSecret: ''
     accessTokenTTL: 1h
     refreshTokenTTL: 24h
-    oauth2:
-      enabled: false
-      providers: {}
-
-  circuitBreaker:
-    maxRequests: 10
-    interval: 60s
-    timeout: 60s
-    failureRatio: 0.5
-    minRequests: 5
-
-  websocket:
-    enabled: true
-    readBufferSize: 4096
-    writeBufferSize: 4096
-    handshakeTimeout: 10s
-    readTimeout: 60s
-    writeTimeout: 10s
-    pingPeriod: 54s
-    maxMessageSize: 524288
-    enableCompression: false
 
   logging:
     level: info
     format: json
 
+  # Optional rateLimit and cache sections, copied into config.yaml as they are, e.g.
+  # rateLimit: {enabled: true, limit: 600, duration: 1m, strategy: redis, redisUrl: redis://redis:6379}
+  rateLimit: {}
+  cache: {}
+
+# Services in Odin's format (docs/configuration.md), rendered into services.yaml.
 services: []
-
-# Redis dependency
-redis:
-  enabled: true
-  auth:
-    enabled: false
-  master:
-    persistence:
-      enabled: false
-
-# Prometheus dependency
-prometheus:
-  enabled: false
-  server:
-    persistentVolume:
-      enabled: false
 
 monitoring:
   enabled: true
@@ -133,5 +108,9 @@ monitoring:
     scrapeTimeout: 10s
 
 secrets:
+  # JWT signing secret for services with authentication: true.
   jwtSecret: ''
-  oauth2ClientSecrets: {}
+  # Admin password (when config.admin.enabled).
+  adminPassword: ''
+  # Use an existing Secret with keys jwt-secret and admin-password instead of the two above.
+  existingSecret: ''

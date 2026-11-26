@@ -43,6 +43,20 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  helm:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint and render
+        run: |
+          set -eux
+          helm() { docker run --rm -v "$PWD/deployments/helm/odin:/chart:ro" alpine/helm:3.22.1 "$@"; }
+          helm lint /chart
+          helm template odin /chart >/dev/null
+          helm template odin /chart --set config.admin.enabled=true --set secrets.jwtSecret=x \
+            --set-json 'services=[{"name":"api","basePath":"/api","targets":["http://api:80"]}]' >/dev/null
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
