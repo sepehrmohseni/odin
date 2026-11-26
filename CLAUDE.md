@@ -79,6 +79,14 @@ check with `git log -1 --format=%B`. Never commit `.env` or real secrets.
 - Services stored in MongoDB (`odin-migrate`) are not loaded by the gateway yet: AUDIT MNT-03. The proxy is `pkg/routing/handler.go`; the
   `/debug/*` endpoints live in `pkg/health`.
 - Go plugins need cgo; the Docker image is static and cannot load them.
+- Releases: v0.2.0 is the latest (2026-11-26). Before tagging, bump the Helm chart's
+  `appVersion` and the versions in `docs/deployment.md` (see the `release` skill).
+- The `traffic-data` branch holds generated badge data (`.github/workflows/traffic.yml`); never
+  merge it into `main`. Clone and view counts need the `TRAFFIC_TOKEN` secret.
+- GitHub job logs need admin rights, and the anonymous API is rate limited (60 calls an hour):
+  poll CI sparingly; read a failed job's log in the owner's browser or reproduce it in Docker.
+- Tests that wait on goroutines (anomaly saves, health checks) must not depend on goroutine
+  order: CI's coverage run changes the timing.
 
 ## Don't
 

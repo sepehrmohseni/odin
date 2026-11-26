@@ -38,6 +38,8 @@ kubectl port-forward svc/odin 8080:8080   # then open http://localhost:8080/admi
 
 Pods restart when the ConfigMap or Secret changes (checksum annotations).
 
-Chart 0.2.0 replaces 0.1.0, which did not render (`templates/service.yaml` was not valid
+Chart 0.3.0 deploys image `0.2.0` by default (0.2.0 used `latest`).
+
+Chart 0.2.0 replaced 0.1.0, which did not render (`templates/service.yaml` was not valid
 template syntax). Its admin port and Redis/Prometheus dependencies are gone, and
 `config.admin.password` moved to `secrets.adminPassword`.

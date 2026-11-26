@@ -50,11 +50,15 @@ Critical and high items that are contained enough to finish in the current harde
 In order, as the owner decided on 2026-11-26. Effort: S = hours, M = a day or two, L = a week or
 more.
 
-### 1. Small fixes, then release v0.2.0
+### 1. Small fixes, then release v0.2.0 (done 2026-11-26)
 
-| Item | Finding | Effort |
-| --- | --- | --- |
-| Release v0.2.0 (binaries, signed multi-arch image), then check it end to end | [OPS-07](docs/AUDIT.md#operations) | S |
+v0.2.0 is released: binaries for Linux and macOS (amd64, arm64) with SBOMs and checksums, and
+the signed multi-arch image `ghcr.io/sepehrmohseni/odin:0.2.0`; the Helm chart 0.3.0 deploys it.
+Fixed before the release: the Postman page's API path (COR-12), GraphQL proxying (COR-10), one
+writer per monitoring WebSocket client (COR-13), warnings for unknown config keys (COR-24), the
+Newman runner (SEC-26), the committed sample token (SEC-27), and anomaly persistence across
+restarts. The demo page has new screenshots, and the README has download, image-pull, clone
+and view badges.
 
 ### 2. OpenID Connect authentication
 
@@ -92,6 +96,15 @@ more.
 | Service discovery for Consul, Istio and Linkerd | [COR-29](docs/AUDIT.md#correctness) | M |
 | Upstream mTLS per service | [COR-29](docs/AUDIT.md#correctness) | S |
 | TLS termination with SNI (certificates per host) | — | M |
+
+### Waiting on the owner
+
+- Add the `TRAFFIC_TOKEN` repository secret (a fine-grained token with read-only
+  Administration access to this repository), so the clone and view badges show numbers
+  instead of "pending" (`.github/workflows/traffic.yml`).
+- Decide when Odin is 1.0: the promise that configuration keys and admin API routes no longer
+  change without a deprecation period.
+- Say when to start section 2 (OpenID Connect); the order of sections 2 to 6 is agreed.
 
 ## Later
 

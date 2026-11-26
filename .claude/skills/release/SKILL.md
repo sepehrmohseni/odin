@@ -22,9 +22,13 @@ Tagging `vX.Y.Z` runs `.github/workflows/release.yml`:
       goreleaser check && goreleaser release --snapshot --clean --skip=sbom,publish && ls dist'
    docker buildx build --platform linux/amd64,linux/arm64 .
    ```
-4. Move the `Unreleased` section of `CHANGELOG.md` under the new version and date; commit
-   `docs: changelog for vX.Y.Z`; push.
+4. Move the `Unreleased` section of `CHANGELOG.md` under the new version and date, with a
+   "Changed (check these when upgrading)" list; bump `appVersion` (and the chart `version`) in
+   `deployments/helm/odin/Chart.yaml` and the versions in `docs/deployment.md`; commit
+   `docs: changelog for vX.Y.Z`; push, and wait for CI on that commit.
 5. Once approved: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`. Watch the Release
    workflow, then check the release page and `cosign verify ghcr.io/<owner>/odin:X.Y.Z
    --certificate-identity-regexp 'github.com/<owner>/odin' --certificate-oidc-issuer
    https://token.actions.githubusercontent.com`.
+6. Afterwards: `curl -sI https://github.com/<owner>/odin/releases/latest` redirects to the new
+   tag, the assets are listed, and `docker run --rm ghcr.io/<owner>/odin:X.Y.Z -version` prints it.

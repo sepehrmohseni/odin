@@ -108,7 +108,7 @@ A generated OpenAPI 3 document of your routes, or your own, with Swagger UI.
 </div>
 
 <p class="status">
-Odin is at 0.1. The configuration format may still change before 1.0; the
+Odin is at 0.2. The configuration format may still change before 1.0; the
 <a href="changelog/">changelog</a> lists every change you need to check when upgrading. Planned
 work, including gRPC transcoding, OIDC and live reload, is on the
 <a href="roadmap/">roadmap</a>, and the <a href="AUDIT/">audit</a> records what was found and

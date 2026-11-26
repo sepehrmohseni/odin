@@ -6,6 +6,12 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
 
 ## [Unreleased]
 
+### Fixed
+
+- A resolved anomaly could be stored as open again when its first save, which waits for the
+  optional explanation, finished after the resolution; anomaly saves now go through one ordered
+  queue.
+
 ## [0.2.0] - 2026-11-26
 
 Plugins that run on requests (Go and WebAssembly), traffic anomaly detection, multi-cluster
