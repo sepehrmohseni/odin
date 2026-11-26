@@ -30,6 +30,10 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `post-request` and `pre-response` hooks fire; an `*echo.HTTPError` from a plugin keeps its
   status (COR-21).
 - Enabled uploaded plugins are activated again at startup.
+- Admin monitoring counts rejected requests with their real status (every 401, 404, 429 or 502
+  used to be recorded as a 200), leaves out the admin's own pages and assets, measures the
+  request rate over the last minute (it was the total divided by 60), and reports per-service
+  traffic, a five-minute timeline and the health of checked targets (`/admin/api/monitoring/metrics`).
 - The admin dashboard lists the configured services; it always said "No services configured".
   Its Edit links lead to the edit page instead of a missing `/edit` route.
 - Gateway errors go through one handler: the `{"message": ...}` body is unchanged, a deadline

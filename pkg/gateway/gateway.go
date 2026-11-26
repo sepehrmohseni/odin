@@ -435,6 +435,12 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	// settings. Target selection skips targets their checker reports unhealthy.
 	checkerByTarget := make(map[string]*health.TargetChecker)
 	var healthCheckers []*health.TargetChecker
+	type checkedService struct {
+		name    string
+		targets []string
+		checker *health.TargetChecker
+	}
+	var checked []checkedService
 	for _, svcConfig := range cfg.Services {
 		if svcConfig.HealthCheck == nil || !svcConfig.HealthCheck.Enabled {
 			continue
@@ -458,7 +464,29 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		}
 		checker.Start()
 		healthCheckers = append(healthCheckers, checker)
+		checked = append(checked, checkedService{svcConfig.Name, svcConfig.Targets, checker})
 	}
+	// The admin dashboard and monitoring page show the targets' health.
+	admin.GetCollector().SetHealthSource(func() []admin.TargetStatus {
+		var out []admin.TargetStatus
+		for _, cs := range checked {
+			for _, target := range cs.targets {
+				th := cs.checker.GetTargetHealth(target)
+				if th == nil {
+					continue
+				}
+				out = append(out, admin.TargetStatus{
+					Service:    cs.name,
+					URL:        target,
+					Status:     string(th.Status),
+					LastCheck:  th.LastCheck,
+					ResponseMs: float64(th.ResponseTime.Microseconds()) / 1000,
+					LastError:  th.LastError,
+				})
+			}
+		}
+		return out
+	})
 	gateway.healthCheckers = healthCheckers
 	router.SetHealthCheck(func(target string) bool {
 		if checker, ok := checkerByTarget[target]; ok {
