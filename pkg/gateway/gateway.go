@@ -66,6 +66,45 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	// and deadlines, and server errors logged with their request.
 	e.HTTPErrorHandler = gwerrors.ErrorHandler(logger)
 
+	// Initialize MongoDB repository
+	mongoConfig := &mongodb.Config{
+		Enabled:        cfg.MongoDB.Enabled,
+		URI:            cfg.MongoDB.URI,
+		Database:       cfg.MongoDB.Database,
+		ConnectTimeout: cfg.MongoDB.ConnectTimeout,
+		MaxPoolSize:    cfg.MongoDB.MaxPoolSize,
+		MinPoolSize:    cfg.MongoDB.MinPoolSize,
+		Auth: mongodb.AuthConfig{
+			Username: cfg.MongoDB.Auth.Username,
+			Password: cfg.MongoDB.Auth.Password,
+			AuthDB:   cfg.MongoDB.Auth.AuthDB,
+		},
+		TLS: mongodb.TLSConfig{
+			Enabled:  cfg.MongoDB.TLS.Enabled,
+			CertFile: cfg.MongoDB.TLS.CertFile,
+			KeyFile:  cfg.MongoDB.TLS.KeyFile,
+			CAFile:   cfg.MongoDB.TLS.CAFile,
+		},
+	}
+
+	mongoRepo, mongoErr := mongodb.NewRepository(mongoConfig, logger)
+	if mongoErr != nil {
+		logger.WithError(mongoErr).Warn("Failed to initialize MongoDB repository, plugin persistence will be disabled")
+		mongoRepo = nil
+	}
+
+	// Services stored in MongoDB join the config file's (which win on a name clash). The admin
+	// keeps editing only the config file, so it never writes stored services into it.
+	fileCfg := cfg
+	var storedServed []config.ServiceConfig
+	if cfg.MongoDB.LoadServices {
+		merged, served, err := withStoredServices(cfg, mongoRepo, logger)
+		if err != nil {
+			return nil, err
+		}
+		cfg, storedServed = merged, served
+	}
+
 	// Client IP: the connection's address unless the request came through a trusted proxy.
 	// (Echo's default believes X-Forwarded-For from anyone, so a client could pick its own IP.)
 	ipExtractor, err := newIPExtractor(cfg.Server.TrustedProxies)
@@ -173,34 +212,7 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		return agg.EnrichResponse(ctx, serviceName, body, nil, authorization)
 	})
 
-	adminHandler := admin.New(cfg, configPath, logger)
-
-	// Initialize MongoDB repository
-	mongoConfig := &mongodb.Config{
-		Enabled:        cfg.MongoDB.Enabled,
-		URI:            cfg.MongoDB.URI,
-		Database:       cfg.MongoDB.Database,
-		ConnectTimeout: cfg.MongoDB.ConnectTimeout,
-		MaxPoolSize:    cfg.MongoDB.MaxPoolSize,
-		MinPoolSize:    cfg.MongoDB.MinPoolSize,
-		Auth: mongodb.AuthConfig{
-			Username: cfg.MongoDB.Auth.Username,
-			Password: cfg.MongoDB.Auth.Password,
-			AuthDB:   cfg.MongoDB.Auth.AuthDB,
-		},
-		TLS: mongodb.TLSConfig{
-			Enabled:  cfg.MongoDB.TLS.Enabled,
-			CertFile: cfg.MongoDB.TLS.CertFile,
-			KeyFile:  cfg.MongoDB.TLS.KeyFile,
-			CAFile:   cfg.MongoDB.TLS.CAFile,
-		},
-	}
-
-	mongoRepo, err := mongodb.NewRepository(mongoConfig, logger)
-	if err != nil {
-		logger.WithError(err).Warn("Failed to initialize MongoDB repository, plugin persistence will be disabled")
-		mongoRepo = nil
-	}
+	adminHandler := admin.New(fileCfg, configPath, logger)
 
 	// Initialize plugin manager. Plugins load only from the plugins directory, the admin's
 	// upload directory and the directories of plugins named in the config file, so a path
@@ -253,6 +265,10 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		adminHandler.SetPluginHandler(pluginManager, pluginRepo)
 		logger.Info("Plugin admin panel initialized")
 	}
+	if mongoRepo != nil && mongoRepo.GetDatabase() != nil {
+		adminHandler.SetStoredServices(mongodb.NewServiceAdapter(mongoRepo, logger), storedServed)
+	}
+
 	// The Middleware page shows and changes the live chain; with MongoDB, changes are saved.
 	adminHandler.SetMiddlewareAPIHandler(pluginManager, pluginRepo)
 
@@ -1115,4 +1131,27 @@ func newClusterManager(cfg *config.Config, logger *logrus.Logger) (*multicluster
 		}
 	}
 	return m, nil
+}
+
+// withStoredServices returns a copy of cfg whose services also include those stored in MongoDB,
+// and the stored ones it added.
+func withStoredServices(cfg *config.Config, repo mongodb.Repository, logger *logrus.Logger) (*config.Config, []config.ServiceConfig, error) {
+	if !cfg.MongoDB.Enabled || repo == nil || repo.GetDatabase() == nil {
+		return nil, nil, fmt.Errorf("mongodb.loadServices needs MongoDB (mongodb.enabled and a working connection)")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stored, err := mongodb.NewServiceAdapter(repo, logger).LoadServices(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("mongodb.loadServices: %w", err)
+	}
+	merged := *cfg
+	var added []config.ServiceConfig
+	var skipped []string
+	merged.Services, added, skipped = config.MergeServices(cfg.Services, stored)
+	for _, msg := range skipped {
+		logger.Warn(msg)
+	}
+	logger.WithField("count", len(added)).Info("Serving services stored in MongoDB")
+	return &merged, added, nil
 }

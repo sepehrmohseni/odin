@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"odin/pkg/ai"
 	"odin/pkg/config"
+	"odin/pkg/mongodb"
 	"odin/pkg/plugins"
 	"os"
 	"path/filepath"
@@ -31,6 +32,8 @@ type AdminHandler struct {
 	logins               *loginLimiter
 	allowedOrigins       map[string]bool // scheme://host, lower case
 	analyzer             *ai.Analyzer    // nil unless ai.enabled
+	storedAdapter        *mongodb.ServiceAdapter
+	storedServed         []config.ServiceConfig // stored services the gateway serves
 	cacheStore           interface{ Clear() }
 	pluginHandler        *PluginHandler
 	middlewareAPIHandler *MiddlewareAPIHandler

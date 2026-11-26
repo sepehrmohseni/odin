@@ -31,6 +31,9 @@ Critical and high items that are contained enough to finish in the current harde
 - [x] Middleware plugins run on the request path in ordered phases (pre-auth, post-auth,
       pre-proxy) with priorities and routes; plugin manager safe under concurrent changes
       ([SEC-14](docs/AUDIT.md#security), COR-21)
+- [x] Every package wired in or removed: error handler, OpenAPI document, WebAssembly plugins,
+      traffic anomaly detection, multi-cluster failover, services from MongoDB, and the admin
+      APIs for them ([MNT-03](docs/AUDIT.md#maintainability), SEC-28, COR-19, COR-20)
 - [x] Release workflow that can publish multi-arch images and binaries
       ([OPS-07](docs/AUDIT.md#operations)) — the first tag and public image wait for the owner
 - [x] Admin pages render their own content; plugin pages render at all
@@ -58,7 +61,6 @@ first. Effort: S = hours, M = a day or two, L = a week or more.
 | Warn about unknown config keys (strict decoding with fallback) | [COR-24](docs/AUDIT.md#correctness) | S | Noisy for existing configs at first |
 | Newman runner: temp file, JSON reporter, correct TLS flag, timeouts | [SEC-26](docs/AUDIT.md#security) | S | — |
 | Raise `pkg/` coverage (now measured; was 9.5 %) and replace tests that re-implement code | [TST-01](docs/AUDIT.md#tests), TST-03, TST-05 | M | — |
-| Wire in the remaining pieces (admin `mongodb_api`, MongoDB service loading); proxy, debug and utils were removed as duplicates; errors, openapi, wasm, ai, multicluster and the admin middleware and AI APIs are wired | [MNT-03](docs/AUDIT.md#maintainability) | L | Owner chose to wire them in |
 
 ## Later
 

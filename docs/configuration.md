@@ -88,6 +88,25 @@ Services in `services.yaml` (same directory as the main file, `services:` at the
 to those in the main file. The admin interface never rewrites `services.yaml`; services defined
 there are read-only in the admin.
 
+## Services in MongoDB
+
+With `mongodb.loadServices: true`, the gateway also serves the services stored in MongoDB's
+`services` collection, which `odin-migrate` fills from YAML files and the admin API manages:
+
+```bash
+curl -u admin:$PASSWORD -H 'Content-Type: application/json' \
+  -d '{"name":"billing","basePath":"/api/billing","targets":["http://billing:8080"],"timeout":"5s"}' \
+  http://localhost:8080/admin/api/mongodb/services
+```
+
+`GET`, `PUT` and `DELETE /admin/api/mongodb/services/{name}` read, replace and remove one;
+`GET /admin/api/mongodb/services` lists them, with `served` telling whether the running gateway
+loaded it. Names, base paths and targets are checked like the admin's service form. Changes
+apply when the gateway restarts, like edits to the config file. A service in the config file
+wins over a stored one with the same name; stored services appear on the admin dashboard marked
+"MongoDB". If the stored services cannot be read at startup, the gateway does not start, so it
+never runs with routes silently missing.
+
 ## Validation
 
 At startup Odin rejects: a port outside 1-65535, services without a name, base path or targets,

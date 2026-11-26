@@ -53,7 +53,8 @@ left out. The pages refresh every few seconds while they are visible. The theme 
 system setting, and the sidebar switches between light and dark.
 
 Secrets (JWT secret, passwords, tokens, credentials inside Redis or MongoDB URLs) are masked in
-every view and export.
+every view and export. Services stored in MongoDB are managed through
+`/admin/api/mongodb/services` (see [Configuration](configuration.md#services-in-mongodb)).
 
 ## Saving changes
 

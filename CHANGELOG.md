@@ -12,6 +12,10 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `pre-proxy`) ordered by priority and limited to their routes; enabling or disabling one takes
   effect on the next request. Programs embedding the gateway can register compiled-in plugins
   with `Gateway.Plugins()` (SEC-14).
+- Services from MongoDB (`mongodb.loadServices`): the services `odin-migrate` stores are served
+  next to the config file's (which win on a name clash), and `/admin/api/mongodb/services`
+  creates, lists, changes and removes them (applied on restart); the dashboard marks them. The
+  unused `pkg/service/mongodb_loader.go`, which opened a second connection, is removed (MNT-03).
 - Multi-cluster failover (`multiCluster`, `services[].clusters`): a service can fail over to, or
   (with `failoverStrategy: active`) share traffic with, the same routes on other gateways, which
   are health-checked and can use their own TLS settings; `X-Odin-Cluster-Hop` stops requests

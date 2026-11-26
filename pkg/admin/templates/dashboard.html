@@ -82,6 +82,7 @@
           <td>
             <span class="name">{{.Name}}</span>
             {{if ne .Protocol "http"}}<span class="odin-tag ms-1">{{.Protocol}}</span>{{end}}
+            {{if .Stored}}<span class="odin-tag ms-1" title="Stored in MongoDB; change it through /admin/api/mongodb/services">MongoDB</span>{{end}}
           </td>
           <td>
             <code>{{.BasePath}}</code>
@@ -106,10 +107,12 @@
           <td class="num text-muted" data-k="avgMs">—</td>
           <td class="text-end text-nowrap">
             <button type="button" class="odin-icon-btn" title="Copy a curl command" data-copy-path="{{.BasePath}}" data-auth="{{.Authentication}}"><i class="bi bi-terminal"></i></button>
+            {{if not .Stored}}
             <a class="odin-icon-btn" href="/admin/services/{{.Name}}" title="Edit"><i class="bi bi-pencil"></i></a>
             <button type="button" class="odin-icon-btn danger" title="Delete"
               hx-delete="/admin/services/{{.Name}}" hx-confirm="Delete the service {{.Name}}? This edits the configuration file."
               hx-swap="none" hx-on::after-request="odinAfterDelete(event)"><i class="bi bi-trash"></i></button>
+            {{end}}
           </td>
         </tr>
         {{end}}

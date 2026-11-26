@@ -358,7 +358,7 @@ type OpenAPIConfig struct {
 }
 
 type MongoDBConfig struct {
-	// Store plugins and integration settings in MongoDB.
+	// Store plugins, integration settings and anomalies in MongoDB.
 	Enabled bool `yaml:"enabled"`
 	// Connection string, e.g. mongodb://user:${MONGO_PASSWORD}@mongo:27017/?authSource=admin.
 	URI string `yaml:"uri"`
@@ -370,8 +370,12 @@ type MongoDBConfig struct {
 	MinPoolSize int `yaml:"minPoolSize"`
 	// Timeout for connecting and the startup ping (default 10s).
 	ConnectTimeout time.Duration `yaml:"connectTimeout"`
-	Auth           MongoDBAuth   `yaml:"auth"`
-	TLS            MongoDBTLS    `yaml:"tls"`
+	// Also serve the services stored in MongoDB (written by odin-migrate or the admin API); a
+	// service in the config file wins over a stored one with the same name. Startup fails when
+	// they cannot be read.
+	LoadServices bool        `yaml:"loadServices"`
+	Auth         MongoDBAuth `yaml:"auth"`
+	TLS          MongoDBTLS  `yaml:"tls"`
 }
 
 type MongoDBAuth struct {
@@ -790,4 +794,30 @@ func EffectiveCache(global CacheConfig, svc *ServiceCacheConfig) (bool, time.Dur
 		}
 	}
 	return true, ttl
+}
+
+// MergeServices adds stored services (from MongoDB) to the config file's. A file service wins
+// over a stored one with the same name, and stored services without a name, base path or target
+// are skipped; skipped says why, for the log.
+func MergeServices(file, stored []ServiceConfig) (merged, added []ServiceConfig, skipped []string) {
+	merged = append([]ServiceConfig(nil), file...)
+	names := map[string]bool{}
+	for _, s := range file {
+		names[s.Name] = true
+	}
+	for _, s := range stored {
+		switch {
+		case s.Name == "" || s.BasePath == "" || len(s.Targets) == 0:
+			skipped = append(skipped, fmt.Sprintf("skipping stored service %q: it needs a name, a base path and a target", s.Name))
+			continue
+		case names[s.Name]:
+			skipped = append(skipped, fmt.Sprintf("service %s is in the config file and in MongoDB; using the config file's", s.Name))
+			continue
+		}
+		s.SetDefaults()
+		names[s.Name] = true
+		merged = append(merged, s)
+		added = append(added, s)
+	}
+	return merged, added, skipped
 }

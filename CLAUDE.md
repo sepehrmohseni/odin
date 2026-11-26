@@ -42,6 +42,7 @@ cores (default half). The check image holds no project code and is shared across
 | `pkg/service/` | `service.Config`, the runtime form that `gateway.go` copies from `config.ServiceConfig` field by field |
 | `pkg/admin/` | Admin UI and API; templates and static files are read from `pkg/admin/templates` and `pkg/admin/static` relative to the working directory |
 | `pkg/plugins/` | Go plugin manager, static validation, uploads (GridFS) |
+| `pkg/wasm/`, `pkg/ai/`, `pkg/multicluster/` | WebAssembly plugins, traffic anomaly detection, multi-cluster failover |
 | `test/unit/pkg/gateway/` | End-to-end tests through the whole gateway with httptest backends |
 | `docker/ci/`, `scripts/` | Check image and wrappers; `quickstart.sh` |
 | `deployments/` | Docker prod compose, Kubernetes manifests, Helm chart (`deployments/helm/odin`) |

@@ -103,6 +103,7 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 	}
 
 	h.registerAIRoutes(protected)
+	h.registerStoredServiceRoutes(protected)
 
 	// Register middleware API routes if middleware handler is available
 	if h.middlewareAPIHandler != nil {
@@ -134,6 +135,7 @@ type dashboardService struct {
 	Cache                    string // "30s", empty when not cached
 	HealthChecked            bool
 	Timeout                  string
+	Stored                   bool // from MongoDB (mongodb.loadServices), managed through its API
 }
 
 // handleDashboard shows the gateway at a glance: live traffic (filled in by the page from the
@@ -145,6 +147,11 @@ func (h *AdminHandler) handleDashboard(c echo.Context) error {
 	services := append([]config.ServiceConfig(nil), h.config.Services...)
 	configMu.Unlock()
 
+	stored := map[string]bool{}
+	for _, svc := range h.storedServed {
+		services = append(services, svc)
+		stored[svc.Name] = true
+	}
 	rows := make([]dashboardService, 0, len(services))
 	for _, svc := range services {
 		row := dashboardService{
@@ -155,6 +162,7 @@ func (h *AdminHandler) handleDashboard(c echo.Context) error {
 			Authentication: svc.Authentication,
 			StripBasePath:  svc.StripBasePath,
 			HealthChecked:  svc.HealthCheck != nil && svc.HealthCheck.Enabled,
+			Stored:         stored[svc.Name],
 		}
 		if row.Protocol == "" {
 			row.Protocol = "http"

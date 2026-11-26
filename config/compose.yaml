@@ -62,6 +62,8 @@ mongodb:
   uri: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
   database: odin
   connectTimeout: 10s
+  # Also serve services stored in MongoDB (odin-migrate, or POST /admin/api/mongodb/services).
+  loadServices: true
 
 services:
   - name: users

@@ -170,3 +170,21 @@ services:
 	assert.Equal(t, "test-secret", cfg.Auth.JWTSecret)
 	assert.True(t, cfg.Services[0].Authentication)
 }
+
+func TestMergeServices(t *testing.T) {
+	file := []config.ServiceConfig{{Name: "orders", BasePath: "/api/orders", Targets: []string{"http://orders"}}}
+	stored := []config.ServiceConfig{
+		{Name: "orders", BasePath: "/v2/orders", Targets: []string{"http://elsewhere"}},
+		{Name: "billing", BasePath: "/api/billing", Targets: []string{"http://billing"}},
+		{Name: "broken", BasePath: "/api/broken"},
+	}
+	merged, added, skipped := config.MergeServices(file, stored)
+
+	require.Len(t, merged, 2)
+	assert.Equal(t, "/api/orders", merged[0].BasePath, "the config file wins")
+	require.Len(t, added, 1)
+	assert.Equal(t, "billing", added[0].Name)
+	assert.Equal(t, "http", added[0].Protocol, "defaults applied")
+	assert.Len(t, skipped, 2)
+	assert.Len(t, file, 1, "the file's list is not modified")
+}

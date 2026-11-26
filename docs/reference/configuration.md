@@ -293,12 +293,13 @@ the main file. For a guided introduction see [Concepts](../concepts.md).
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `mongodb.enabled` | boolean | Store plugins and integration settings in MongoDB. |
+| `mongodb.enabled` | boolean | Store plugins, integration settings and anomalies in MongoDB. |
 | `mongodb.uri` | string | Connection string, e.g. mongodb://user:${MONGO_PASSWORD}@mongo:27017/?authSource=admin. |
 | `mongodb.database` | string | Database name. |
 | `mongodb.maxPoolSize` | integer | Maximum connections. |
 | `mongodb.minPoolSize` | integer | Minimum idle connections. |
 | `mongodb.connectTimeout` | duration | Timeout for connecting and the startup ping (default 10s). |
+| `mongodb.loadServices` | boolean | Also serve the services stored in MongoDB (written by odin-migrate or the admin API); a service in the config file wins over a stored one with the same name. Startup fails when they cannot be read. |
 | `mongodb.auth.username` | string |  |
 | `mongodb.auth.password` | string |  |
 | `mongodb.auth.authDB` | string |  |
