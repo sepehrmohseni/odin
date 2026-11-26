@@ -119,8 +119,8 @@ func (s *RedisStore) Delete(key string) {
 func (s *RedisStore) Clear() {
 	ctx := context.Background()
 	iter := s.client.Scan(ctx, 0, "cache:*", 100).Iterator()
-	for iter.Next(ctx) {
-		s.client.Del(ctx, iter.Val())
+	for key := range iter.Vals(ctx) {
+		s.client.Del(ctx, key)
 	}
 }
 

@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -69,8 +70,13 @@ func NewManager(config Config, logger *logrus.Logger) (*Manager, error) {
 	config.SetDefaults()
 
 	// Create OTLP exporter
-	opts := []otlptracehttp.Option{
-		otlptracehttp.WithEndpoint(config.Endpoint),
+	// WithEndpoint takes host:port only; the default (and most configs) give a full URL such as
+	// http://localhost:4318/v1/traces, which WithEndpoint cannot parse.
+	var opts []otlptracehttp.Option
+	if strings.Contains(config.Endpoint, "://") {
+		opts = append(opts, otlptracehttp.WithEndpointURL(config.Endpoint))
+	} else {
+		opts = append(opts, otlptracehttp.WithEndpoint(config.Endpoint))
 	}
 	if config.Insecure {
 		opts = append(opts, otlptracehttp.WithInsecure())

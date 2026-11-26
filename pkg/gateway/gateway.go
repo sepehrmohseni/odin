@@ -28,7 +28,6 @@ import (
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 )
 
 type Gateway struct {
@@ -65,9 +64,9 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		return nil, fmt.Errorf("failed to initialize tracing: %w", err)
 	}
 
-	// Add OpenTelemetry middleware for Echo
+	// Server spans for every request (a no-op when tracing is disabled)
 	if cfg.Tracing.Enabled {
-		e.Use(otelecho.Middleware(cfg.Tracing.ServiceName))
+		e.Use(tracingManager.Middleware())
 	}
 
 	// Add monitoring middleware
@@ -457,8 +456,32 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		}
 	})
 
-	e.Use(echomw.LoggerWithConfig(echomw.LoggerConfig{
-		Format: "${time_rfc3339} | ${remote_ip} | ${method} ${uri} | ${status} | ${latency_human}\n",
+	// Access log through the gateway's logger (honours logging.level and logging.json)
+	e.Use(echomw.RequestLoggerWithConfig(echomw.RequestLoggerConfig{
+		LogStatus:    true,
+		LogURI:       true,
+		LogMethod:    true,
+		LogRemoteIP:  true,
+		LogLatency:   true,
+		LogError:     true,
+		HandleError:  true,
+		LogUserAgent: true,
+		LogValuesFunc: func(c echo.Context, v echomw.RequestLoggerValues) error {
+			entry := logger.WithFields(logrus.Fields{
+				"method":     v.Method,
+				"uri":        v.URI,
+				"status":     v.Status,
+				"remote_ip":  v.RemoteIP,
+				"latency_ms": v.Latency.Milliseconds(),
+				"user_agent": v.UserAgent,
+			})
+			if v.Error != nil {
+				entry.WithError(v.Error).Warn("request")
+			} else {
+				entry.Info("request")
+			}
+			return nil
+		},
 	}))
 
 	if cfg.Monitoring.Enabled {
