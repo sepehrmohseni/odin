@@ -164,6 +164,7 @@ the main file. For a guided introduction see [Concepts](../concepts.md).
 | `services[].healthCheck.expectedStatus` | list of integer | Expected HTTP status codes (default: [200, 204]) |
 | `services[].healthCheck.insecureSkipVerify` | boolean | Skip TLS verification |
 | `services[].healthCheck.path` | string | Checked path (default: /health) |
+| `services[].clusters` | list of string | Other clusters (multiCluster.clusters) serving this service, or ["*"] for all of them: failover targets, or extra targets with multiCluster.failoverStrategy active. |
 | `services[].cache.enabled` | boolean | Set false to never cache this service when cache.enabled is true. |
 | `services[].cache.ttl` | duration | Overrides cache.ttl for this service. |
 | `services[].rateLimit.enabled` | boolean | Set false to exempt this service from the global limit. |
@@ -247,37 +248,33 @@ the main file. For a guided introduction see [Concepts](../concepts.md).
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `multiCluster.enabled` | boolean |  |
-| `multiCluster.localCluster` | string |  |
-| `multiCluster.clusters` | list of objects |  |
-| `multiCluster.clusters[].name` | string |  |
-| `multiCluster.clusters[].endpoint` | string |  |
-| `multiCluster.clusters[].region` | string |  |
-| `multiCluster.clusters[].zone` | string |  |
-| `multiCluster.clusters[].priority` | integer |  |
-| `multiCluster.clusters[].weight` | integer |  |
-| `multiCluster.clusters[].enabled` | boolean |  |
-| `multiCluster.clusters[].healthCheck.enabled` | boolean |  |
-| `multiCluster.clusters[].healthCheck.interval` | duration |  |
-| `multiCluster.clusters[].healthCheck.timeout` | duration |  |
-| `multiCluster.clusters[].healthCheck.healthyThreshold` | integer |  |
-| `multiCluster.clusters[].healthCheck.unhealthyThreshold` | integer |  |
-| `multiCluster.clusters[].healthCheck.path` | string |  |
-| `multiCluster.clusters[].auth.type` | string |  |
-| `multiCluster.clusters[].auth.token` | string |  |
-| `multiCluster.clusters[].auth.username` | string |  |
-| `multiCluster.clusters[].auth.password` | string |  |
-| `multiCluster.clusters[].tls.enabled` | boolean |  |
-| `multiCluster.clusters[].tls.certFile` | string |  |
-| `multiCluster.clusters[].tls.keyFile` | string |  |
-| `multiCluster.clusters[].tls.caFile` | string |  |
-| `multiCluster.clusters[].tls.insecure` | boolean |  |
-| `multiCluster.clusters[].metadata` | map of string to string |  |
-| `multiCluster.failoverStrategy` | string |  |
-| `multiCluster.syncInterval` | duration |  |
-| `multiCluster.loadBalancing` | string |  |
-| `multiCluster.affinityEnabled` | boolean |  |
-| `multiCluster.affinityTTL` | duration |  |
+| `multiCluster.enabled` | boolean | Let services that list clusters (services[].clusters) use them. |
+| `multiCluster.localCluster` | string | This gateway's cluster name, sent with requests forwarded to another cluster (default odin). |
+| `multiCluster.clusters` | list of objects | Other gateways serving the same routes. |
+| `multiCluster.clusters[].name` | string | Name that services list in services[].clusters. |
+| `multiCluster.clusters[].endpoint` | string | Base URL, for example https://eu-west.gateway.example.com. |
+| `multiCluster.clusters[].region` | string | Informational, shown in the admin. |
+| `multiCluster.clusters[].priority` | integer | Preference for failover: higher is tried first. |
+| `multiCluster.clusters[].enabled` | boolean | Use this cluster. |
+| `multiCluster.clusters[].healthCheck` | object | Health check of the endpoint; an unhealthy cluster gets no requests. |
+| `multiCluster.clusters[].healthCheck.enabled` | boolean | Check the cluster's health. |
+| `multiCluster.clusters[].healthCheck.interval` | duration | How often (default 10s). |
+| `multiCluster.clusters[].healthCheck.timeout` | duration | Per check (default 3s). |
+| `multiCluster.clusters[].healthCheck.healthyThreshold` | integer | Passing checks before an unhealthy cluster is used again (default 1). |
+| `multiCluster.clusters[].healthCheck.unhealthyThreshold` | integer | Failing checks before a cluster is skipped (default 2). |
+| `multiCluster.clusters[].healthCheck.path` | string | Path checked; any 2xx passes (default /health). |
+| `multiCluster.clusters[].auth` | object | Credentials for the health check request. |
+| `multiCluster.clusters[].auth.type` | string | none (default), token (a Bearer token) or basic. |
+| `multiCluster.clusters[].auth.token` | string | Bearer token for type token. |
+| `multiCluster.clusters[].auth.username` | string | User for type basic. |
+| `multiCluster.clusters[].auth.password` | string | Password for type basic. |
+| `multiCluster.clusters[].tls` | object | TLS for the health check and for requests forwarded to the cluster. |
+| `multiCluster.clusters[].tls.enabled` | boolean | Use these TLS settings (an https endpoint works without them, with the system CAs). |
+| `multiCluster.clusters[].tls.certFile` | string | Client certificate, for clusters that require mutual TLS. |
+| `multiCluster.clusters[].tls.keyFile` | string | Key of certFile. |
+| `multiCluster.clusters[].tls.caFile` | string | CA bundle that the cluster's certificate is checked against. |
+| `multiCluster.clusters[].tls.insecure` | boolean | Do not check the cluster's certificate (testing only). |
+| `multiCluster.failoverStrategy` | string | failover (default): a service uses its clusters only when none of its own targets is available, most preferred first. active: clusters share the traffic with its targets. |
 
 ## `openapi`
 

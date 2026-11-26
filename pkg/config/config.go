@@ -264,52 +264,74 @@ type WASMPluginConfig struct {
 }
 
 type MultiClusterConfig struct {
-	Enabled          bool            `yaml:"enabled"`
-	LocalCluster     string          `yaml:"localCluster"`
-	Clusters         []ClusterConfig `yaml:"clusters"`
-	FailoverStrategy string          `yaml:"failoverStrategy"`
-	SyncInterval     time.Duration   `yaml:"syncInterval"`
-	LoadBalancing    string          `yaml:"loadBalancing"`
-	AffinityEnabled  bool            `yaml:"affinityEnabled"`
-	AffinityTTL      time.Duration   `yaml:"affinityTTL"`
+	// Let services that list clusters (services[].clusters) use them.
+	Enabled bool `yaml:"enabled"`
+	// This gateway's cluster name, sent with requests forwarded to another cluster (default odin).
+	LocalCluster string `yaml:"localCluster"`
+	// Other gateways serving the same routes.
+	Clusters []ClusterConfig `yaml:"clusters"`
+	// failover (default): a service uses its clusters only when none of its own targets is
+	// available, most preferred first. active: clusters share the traffic with its targets.
+	FailoverStrategy string `yaml:"failoverStrategy"`
 }
 
+// ClusterConfig is another gateway that serves the same routes.
 type ClusterConfig struct {
-	Name        string             `yaml:"name"`
-	Endpoint    string             `yaml:"endpoint"`
-	Region      string             `yaml:"region"`
-	Zone        string             `yaml:"zone"`
-	Priority    int                `yaml:"priority"`
-	Weight      int                `yaml:"weight"`
-	Enabled     bool               `yaml:"enabled"`
+	// Name that services list in services[].clusters.
+	Name string `yaml:"name"`
+	// Base URL, for example https://eu-west.gateway.example.com.
+	Endpoint string `yaml:"endpoint"`
+	// Informational, shown in the admin.
+	Region string `yaml:"region"`
+	// Preference for failover: higher is tried first.
+	Priority int `yaml:"priority"`
+	// Use this cluster.
+	Enabled bool `yaml:"enabled"`
+	// Health check of the endpoint; an unhealthy cluster gets no requests.
 	HealthCheck ClusterHealthCheck `yaml:"healthCheck"`
-	Auth        ClusterAuth        `yaml:"auth"`
-	TLS         ClusterTLS         `yaml:"tls"`
-	Metadata    map[string]string  `yaml:"metadata"`
+	// Credentials for the health check request.
+	Auth ClusterAuth `yaml:"auth"`
+	// TLS for the health check and for requests forwarded to the cluster.
+	TLS ClusterTLS `yaml:"tls"`
 }
 
 type ClusterHealthCheck struct {
-	Enabled            bool          `yaml:"enabled"`
-	Interval           time.Duration `yaml:"interval"`
-	Timeout            time.Duration `yaml:"timeout"`
-	HealthyThreshold   int           `yaml:"healthyThreshold"`
-	UnhealthyThreshold int           `yaml:"unhealthyThreshold"`
-	Path               string        `yaml:"path"`
+	// Check the cluster's health.
+	Enabled bool `yaml:"enabled"`
+	// How often (default 10s).
+	Interval time.Duration `yaml:"interval"`
+	// Per check (default 3s).
+	Timeout time.Duration `yaml:"timeout"`
+	// Passing checks before an unhealthy cluster is used again (default 1).
+	HealthyThreshold int `yaml:"healthyThreshold"`
+	// Failing checks before a cluster is skipped (default 2).
+	UnhealthyThreshold int `yaml:"unhealthyThreshold"`
+	// Path checked; any 2xx passes (default /health).
+	Path string `yaml:"path"`
 }
 
 type ClusterAuth struct {
-	Type     string `yaml:"type"`
-	Token    string `yaml:"token"`
+	// none (default), token (a Bearer token) or basic.
+	Type string `yaml:"type"`
+	// Bearer token for type token.
+	Token string `yaml:"token"`
+	// User for type basic.
 	Username string `yaml:"username"`
+	// Password for type basic.
 	Password string `yaml:"password"`
 }
 
 type ClusterTLS struct {
-	Enabled  bool   `yaml:"enabled"`
+	// Use these TLS settings (an https endpoint works without them, with the system CAs).
+	Enabled bool `yaml:"enabled"`
+	// Client certificate, for clusters that require mutual TLS.
 	CertFile string `yaml:"certFile"`
-	KeyFile  string `yaml:"keyFile"`
-	CAFile   string `yaml:"caFile"`
-	Insecure bool   `yaml:"insecure"`
+	// Key of certFile.
+	KeyFile string `yaml:"keyFile"`
+	// CA bundle that the cluster's certificate is checked against.
+	CAFile string `yaml:"caFile"`
+	// Do not check the cluster's certificate (testing only).
+	Insecure bool `yaml:"insecure"`
 }
 
 type OpenAPIConfig struct {
@@ -426,7 +448,10 @@ type ServiceConfig struct {
 	// Settings for protocol: grpc.
 	GRPC *GRPCConfig `yaml:"grpc,omitempty"`
 	// Active health checks; unhealthy targets get no traffic while a healthy one remains.
-	HealthCheck    *HealthCheckConfig      `yaml:"healthCheck,omitempty"`
+	HealthCheck *HealthCheckConfig `yaml:"healthCheck,omitempty"`
+	// Other clusters (multiCluster.clusters) serving this service, or ["*"] for all of them:
+	// failover targets, or extra targets with multiCluster.failoverStrategy active.
+	Clusters       []string                `yaml:"clusters,omitempty"`
 	Cache          *ServiceCacheConfig     `yaml:"cache,omitempty"`
 	RateLimit      *ServiceRateLimitConfig `yaml:"rateLimit,omitempty"`
 	CircuitBreaker *CircuitBreakerConfig   `yaml:"circuitBreaker,omitempty"`

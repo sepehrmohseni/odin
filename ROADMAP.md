@@ -58,13 +58,12 @@ first. Effort: S = hours, M = a day or two, L = a week or more.
 | Warn about unknown config keys (strict decoding with fallback) | [COR-24](docs/AUDIT.md#correctness) | S | Noisy for existing configs at first |
 | Newman runner: temp file, JSON reporter, correct TLS flag, timeouts | [SEC-26](docs/AUDIT.md#security) | S | — |
 | Raise `pkg/` coverage (now measured; was 9.5 %) and replace tests that re-implement code | [TST-01](docs/AUDIT.md#tests), TST-03, TST-05 | M | — |
-| Wire in the remaining packages (multicluster, admin `mongodb_api`); proxy, debug and utils were removed as duplicates; errors, openapi, wasm, ai and the admin middleware and AI APIs are wired | [MNT-03](docs/AUDIT.md#maintainability) | L | Owner chose to wire them in |
+| Wire in the remaining pieces (admin `mongodb_api`, MongoDB service loading); proxy, debug and utils were removed as duplicates; errors, openapi, wasm, ai, multicluster and the admin middleware and AI APIs are wired | [MNT-03](docs/AUDIT.md#maintainability) | L | Owner chose to wire them in |
 
 ## Later
 
 - Live configuration reload without dropping connections ([COR-23](docs/AUDIT.md#correctness))
-- Multi-cluster routing with synchronised state ([COR-20](docs/AUDIT.md#correctness)); real
-  service discovery for Consul, Istio and Linkerd, and upstream mTLS
+- Real service discovery for Consul, Istio and Linkerd, and upstream mTLS
   ([COR-29](docs/AUDIT.md#correctness))
 - OpenAPI generation that is valid OpenAPI ([COR-28](docs/AUDIT.md#correctness))
 - Encrypt integration credentials at rest ([SEC-22](docs/AUDIT.md#security))

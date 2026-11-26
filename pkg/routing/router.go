@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"crypto/tls"
 	"time"
 
 	"odin/pkg/cache"
@@ -21,6 +22,8 @@ type Router struct {
 	authMiddleware echo.MiddlewareFunc
 	routeMW        []echo.MiddlewareFunc
 	healthy        func(target string) bool
+	clusterTLS     func(target string) *tls.Config
+	localCluster   string
 	rateLimiter    func(svc *service.Config) echo.MiddlewareFunc
 	enrich         func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error)
 	phases         PluginPhases
@@ -45,6 +48,12 @@ func (r *Router) SetEnricher(fn func(ctx context.Context, serviceName string, bo
 // SetRateLimiter supplies the rate-limit middleware for a service (nil for none).
 func (r *Router) SetRateLimiter(fn func(svc *service.Config) echo.MiddlewareFunc) {
 	r.rateLimiter = fn
+}
+
+// SetClusters gives service handlers the TLS settings of cluster targets and this gateway's
+// cluster name (multi-cluster).
+func (r *Router) SetClusters(local string, tlsFor func(target string) *tls.Config) {
+	r.localCluster, r.clusterTLS = local, tlsFor
 }
 
 // SetHealthCheck lets service handlers skip targets that fail their health checks.
@@ -92,7 +101,12 @@ func (r *Router) RegisterRoutes() error {
 		}).Info("Registering HTTP service route")
 
 		// Create service handler
-		handler, err := NewServiceHandler(svc, r.logger, HandlerOptions{Healthy: r.healthy, Enrich: r.enrich})
+		handler, err := NewServiceHandler(svc, r.logger, HandlerOptions{
+			Healthy:      r.healthy,
+			Enrich:       r.enrich,
+			ClusterTLS:   r.clusterTLS,
+			LocalCluster: r.localCluster,
+		})
 		if err != nil {
 			return err
 		}

@@ -105,3 +105,42 @@ with `Retry-After`. If Redis is unreachable, requests are allowed and the error 
 
 The weight split hashes the client IP, so a client stays on the same side. `weight: 100` sends
 all traffic to the canary.
+
+## Multi-cluster failover
+
+A service can fall back to, or share traffic with, the same service in other clusters: other
+gateways (another Odin, an ingress) that serve the same routes.
+
+```yaml
+multiCluster:
+  enabled: true
+  localCluster: eu-central         # this gateway, as other clusters see it
+  failoverStrategy: failover       # or active
+  clusters:
+    - name: us-east
+      endpoint: https://us-east.gateway.example.com
+      region: us-east-1
+      priority: 10                 # higher is tried first
+      enabled: true
+      healthCheck: {enabled: true, path: /health, interval: 10s}
+      tls: {enabled: true, caFile: /etc/odin/clusters-ca.pem}
+
+services:
+  - name: orders
+    basePath: /api/orders
+    targets: [http://orders:8080]
+    clusters: [us-east]            # or ["*"] for every cluster
+```
+
+With `failover` (the default), a service's clusters are used only when none of its own targets
+is available (unhealthy by its health check, or with an open circuit breaker), the most preferred
+healthy cluster first. With `active`, cluster endpoints are extra targets that share the traffic
+under the service's load balancing. A cluster whose health check fails gets no requests;
+`auth` adds a token or basic credentials to that check, and `tls` (a CA bundle, a client
+certificate for mutual TLS) applies to the check and to forwarded requests. The path is
+forwarded as it is, so the other cluster must serve the same base paths.
+
+A request sent to another cluster carries `X-Odin-Cluster-Hop` with the sender's
+`localCluster`, and a request that arrives with that header is never sent on to a cluster, so
+two clusters that fail over to each other cannot pass a request back and forth. Cluster targets
+appear with their health on the admin's dashboard and monitoring page.

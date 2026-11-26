@@ -12,6 +12,13 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `pre-proxy`) ordered by priority and limited to their routes; enabling or disabling one takes
   effect on the next request. Programs embedding the gateway can register compiled-in plugins
   with `Gateway.Plugins()` (SEC-14).
+- Multi-cluster failover (`multiCluster`, `services[].clusters`): a service can fail over to, or
+  (with `failoverStrategy: active`) share traffic with, the same routes on other gateways, which
+  are health-checked and can use their own TLS settings; `X-Odin-Cluster-Hop` stops requests
+  bouncing between clusters. `pkg/multicluster` is rewritten (COR-20): it polled a
+  `/api/services` endpoint that does not exist and wrote its affinity map under a read lock.
+  Removed keys, which never had an effect: `syncInterval`, `loadBalancing`, `affinityEnabled`,
+  `affinityTTL`, and per cluster `zone`, `weight` and `metadata`.
 - Traffic anomaly detection (`ai`): per-service baselines of request rate, server error share
   and latency, z-score detection with floors and minimum counts, ongoing anomalies that resolve
   themselves, webhook alerts (`alertMinSeverity` is new), optional explanations from an analysis

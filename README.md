@@ -60,7 +60,7 @@ What Odin does today. Each item is covered by the end-to-end tests in
   optional base-path stripping, per-service static headers, `X-Forwarded-*` headers.
 - **Resilience**: upstream timeouts, retries for idempotent requests with failover to another
   target, active health checks that take unhealthy targets out of rotation, per-target circuit
-  breakers.
+  breakers, and failover to (or traffic sharing with) other clusters.
 - **Security**: JWT authentication per service (HMAC, expiry required, optional issuer and
   audience), request body limits, client IPs trusted from configured proxies only.
 - **Traffic control**: rate limits per service and client (user or IP), in memory or shared
@@ -138,13 +138,12 @@ pkg/auth/ ratelimit/ circuit/ cache/ canary/ transform/ aggregator/ websocket/ g
 pkg/health/ monitoring/ tracing/   health checks and alerts, Prometheus, OpenTelemetry
 pkg/admin/           admin web interface and API (templates/ and static/ are served from disk)
 pkg/plugins/         Go plugin loading, validation and upload
+pkg/wasm/ ai/ multicluster/  WebAssembly plugins, anomaly detection, multi-cluster failover
 pkg/config/          configuration schema and loading
 test/unit/           tests (test/unit/pkg/gateway drives the whole gateway)
 docker/ci/ scripts/  check image and wrappers;  deployments/  Docker, Kubernetes, Helm
 ```
 
-Multi-cluster routing is not wired into the gateway yet;
-see [ROADMAP.md](ROADMAP.md).
 
 ## Deployment
 

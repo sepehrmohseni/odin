@@ -75,8 +75,7 @@ check with `git log -1 --format=%B`. Never commit `.env` or real secrets.
 - The admin writes the config file atomically in its directory; in the containers that file is
   read-only, so admin edits fail there (elsewhere they apply on restart).
 - Middleware order matters: auth must run before the cache (AUDIT SEC-03).
-- Some packages are not wired into the gateway yet (multicluster): AUDIT
-  MNT-03. Don't document them as features. The proxy is `pkg/routing/handler.go`; the
+- Services stored in MongoDB (`odin-migrate`) are not loaded by the gateway yet: AUDIT MNT-03. The proxy is `pkg/routing/handler.go`; the
   `/debug/*` endpoints live in `pkg/health`.
 - Go plugins need cgo; the Docker image is static and cannot load them.
 

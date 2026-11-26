@@ -41,6 +41,11 @@ type Config struct {
 
 	// CircuitBreaker, when set, trips per target.
 	CircuitBreaker *CircuitBreakerSettings `yaml:"-"`
+	// Endpoints of other clusters serving this service, most preferred first (multi-cluster).
+	// With ClusterFailover they are tried only when no target is available; otherwise they
+	// share the traffic with Targets.
+	ClusterTargets  []string `yaml:"-"`
+	ClusterFailover bool     `yaml:"-"`
 }
 
 // CircuitBreakerSettings mirrors config.CircuitBreakerConfig with defaults applied.

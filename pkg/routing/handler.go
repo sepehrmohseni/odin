@@ -3,6 +3,7 @@ package routing
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -40,7 +41,16 @@ type HandlerOptions struct {
 	// Enrich adds aggregation dependency data to a JSON response body (services with an
 	// aggregation section). Nil disables enrichment.
 	Enrich func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error)
+	// ClusterTLS returns TLS settings for a cluster target (multi-cluster), or nil.
+	ClusterTLS func(target string) *tls.Config
+	// LocalCluster names this gateway in the hop header of requests sent to other clusters.
+	LocalCluster string
 }
+
+// ClusterHopHeader marks a request forwarded to another cluster. A request that arrives with it
+// is not forwarded to a further cluster, so clusters that fail over to each other cannot bounce
+// it back and forth. (The same name as multicluster.HopHeader.)
+const ClusterHopHeader = "X-Odin-Cluster-Hop"
 
 // ServiceHandler forwards requests for one HTTP service to its targets.
 type ServiceHandler struct {
@@ -55,6 +65,9 @@ type ServiceHandler struct {
 	breakers        map[string]*circuit.CircuitBreaker // per target, when configured
 	enrich          func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error)
 	wsProxy         *websocket.Proxy
+	remote          map[string]bool              // cluster targets
+	clusterRT       map[string]http.RoundTripper // cluster targets with their own TLS
+	localCluster    string
 }
 
 // errUpstream5xx marks a 5xx response as a failure for the circuit breaker.
@@ -71,6 +84,7 @@ func NewServiceHandler(svc *service.Config, logger *logrus.Logger, opts HandlerO
 	if svc.Canary != nil {
 		all = append(all, svc.Canary.Targets...)
 	}
+	all = append(all, svc.ClusterTargets...)
 	for _, t := range all {
 		u, err := url.Parse(t)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -104,7 +118,27 @@ func NewServiceHandler(svc *service.Config, logger *logrus.Logger, opts HandlerO
 		}
 	}
 
+	remote := make(map[string]bool, len(svc.ClusterTargets))
+	clusterRT := map[string]http.RoundTripper{}
+	for _, t := range svc.ClusterTargets {
+		remote[t] = true
+		if opts.ClusterTLS != nil && opts.Transport == nil {
+			if tc := opts.ClusterTLS(t); tc != nil {
+				rt := newUpstreamTransport(svc.Timeout)
+				rt.TLSClientConfig = tc
+				clusterRT[t] = rt
+			}
+		}
+	}
+	local := opts.LocalCluster
+	if local == "" {
+		local = "odin"
+	}
+
 	return &ServiceHandler{
+		remote:          remote,
+		clusterRT:       clusterRT,
+		localCluster:    local,
 		service:         svc,
 		logger:          logger,
 		transport:       transport,
@@ -288,11 +322,11 @@ func retryableStatus(code int) bool {
 func (h *ServiceHandler) roundTrip(target string, req *http.Request) (*http.Response, error) {
 	cb := h.breakers[target]
 	if cb == nil {
-		return h.transport.RoundTrip(req)
+		return h.transportFor(target).RoundTrip(req)
 	}
 	var resp *http.Response
 	_, err := cb.Execute(func() (interface{}, error) {
-		r, err := h.transport.RoundTrip(req)
+		r, err := h.transportFor(target).RoundTrip(req)
 		if err != nil {
 			return nil, err
 		}
@@ -306,6 +340,13 @@ func (h *ServiceHandler) roundTrip(target string, req *http.Request) (*http.Resp
 		return resp, nil
 	}
 	return resp, err
+}
+
+func (h *ServiceHandler) transportFor(target string) http.RoundTripper {
+	if rt, ok := h.clusterRT[target]; ok {
+		return rt
+	}
+	return h.transport
 }
 
 // available reports whether a target may be tried: healthy, and its circuit not open.
@@ -346,13 +387,28 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 
 // selectTarget picks a target for this attempt: canary or production per the canary rules, then
 // healthy targets not tried yet in this request, then load balancing among those.
+//
+// Cluster targets (multi-cluster) are a further tier with ClusterFailover: tried in order of
+// preference only when no own target is available. Without it they share the traffic. A request
+// that already came from another cluster is never sent to a cluster.
 func (h *ServiceHandler) selectTarget(req *http.Request, tried map[string]bool) string {
 	candidates := h.canaryRouter.GetTargets(req, h.service)
+	hopped := req.Header.Get(ClusterHopHeader) != ""
+	if len(h.service.ClusterTargets) > 0 && !h.service.ClusterFailover && !hopped {
+		candidates = append(append([]string(nil), candidates...), h.service.ClusterTargets...)
+	}
 
 	pick := make([]string, 0, len(candidates))
 	for _, t := range candidates {
 		if !tried[t] && h.available(t) {
 			pick = append(pick, t)
+		}
+	}
+	if len(pick) == 0 && h.service.ClusterFailover && !hopped {
+		for _, t := range h.service.ClusterTargets {
+			if !tried[t] && h.available(t) {
+				return t
+			}
 		}
 	}
 	if len(pick) == 0 { // everything tried or unhealthy: still try an untried one
@@ -485,6 +541,9 @@ func (h *ServiceHandler) buildRequest(c echo.Context, target string, body []byte
 	}
 
 	h.setForwardingHeaders(c, in.Header, out.Header)
+	if h.remote[target] {
+		out.Header.Set(ClusterHopHeader, h.localCluster)
+	}
 
 	// Join the caller's trace.
 	tracing.InjectHTTP(ctx, out.Header)

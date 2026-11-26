@@ -25,6 +25,7 @@ import (
 	"odin/pkg/middleware"
 	"odin/pkg/mongodb"
 	"odin/pkg/monitoring"
+	"odin/pkg/multicluster"
 	"odin/pkg/openapi"
 	"odin/pkg/plugins"
 	"odin/pkg/ratelimit"
@@ -158,6 +159,16 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	}
 
 	router := routing.NewRouter(e, registry, logger)
+
+	// Other clusters serving the same routes (multi-cluster): failover or shared targets.
+	clusters, err := newClusterManager(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+	if clusters != nil {
+		router.SetClusters(clusters.Local(), clusters.TLS)
+		clusters.Start()
+	}
 	router.SetEnricher(func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error) {
 		return agg.EnrichResponse(ctx, serviceName, body, nil, authorization)
 	})
@@ -396,6 +407,9 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	if wasmRuntime != nil {
 		gateway.closers = append(gateway.closers, wasmRuntime)
 	}
+	if clusters != nil {
+		gateway.closers = append(gateway.closers, clusters)
+	}
 	if analyzer != nil {
 		gateway.closers = append(gateway.closers, analyzer)
 		gateway.analyzer = analyzer
@@ -515,10 +529,41 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 				})
 			}
 		}
+		if clusters != nil {
+			byEndpoint := map[string]multicluster.Status{}
+			for _, st := range clusters.Status() {
+				byEndpoint[st.Endpoint] = st
+			}
+			for _, svc := range registry.GetAllServices() {
+				for _, endpoint := range svc.ClusterTargets {
+					st, ok := byEndpoint[endpoint]
+					if !ok || !st.Checked {
+						continue
+					}
+					state := "healthy"
+					if !st.Healthy {
+						state = "unhealthy"
+					}
+					out = append(out, admin.TargetStatus{
+						Service:    svc.Name,
+						URL:        endpoint + " (cluster " + st.Name + ")",
+						Status:     state,
+						LastCheck:  st.LastCheck,
+						ResponseMs: st.LatencyMs,
+						LastError:  st.LastError,
+					})
+				}
+			}
+		}
 		return out
 	})
 	gateway.healthCheckers = healthCheckers
 	router.SetHealthCheck(func(target string) bool {
+		if clusters != nil {
+			if healthy, ok := clusters.Healthy(target); ok {
+				return healthy
+			}
+		}
 		if checker, ok := checkerByTarget[target]; ok {
 			return checker.IsHealthy(target)
 		}
@@ -934,6 +979,10 @@ func serviceFromConfig(cfg *config.Config, svcConfig config.ServiceConfig) *serv
 
 		svc.Aggregation = aggregation
 	}
+	if cfg.MultiCluster.Enabled && len(svcConfig.Clusters) > 0 {
+		svc.ClusterTargets = multicluster.Endpoints(cfg.MultiCluster, svcConfig.Clusters)
+		svc.ClusterFailover = cfg.MultiCluster.FailoverStrategy != "active"
+	}
 	return svc
 }
 
@@ -1037,3 +1086,33 @@ func newAnalyzer(cfg config.AIConfig, mongoRepo mongodb.Repository, logger *logr
 
 // Analyzer returns the traffic anomaly detector, or nil when ai.enabled is false.
 func (g *Gateway) Analyzer() *ai.Analyzer { return g.analyzer }
+
+// newClusterManager checks the multi-cluster settings and the services that use them, and
+// returns the manager, or nil when multiCluster is off.
+func newClusterManager(cfg *config.Config, logger *logrus.Logger) (*multicluster.Manager, error) {
+	if !cfg.MultiCluster.Enabled {
+		for _, svc := range cfg.Services {
+			if len(svc.Clusters) > 0 {
+				return nil, fmt.Errorf("service %s lists clusters, but multiCluster.enabled is false", svc.Name)
+			}
+		}
+		return nil, nil
+	}
+	switch cfg.MultiCluster.FailoverStrategy {
+	case "", "failover", "active":
+	default:
+		return nil, fmt.Errorf("multiCluster.failoverStrategy %q: use failover or active", cfg.MultiCluster.FailoverStrategy)
+	}
+	m, err := multicluster.NewManager(cfg.MultiCluster, logger)
+	if err != nil {
+		return nil, err
+	}
+	for _, svc := range cfg.Services {
+		for _, name := range svc.Clusters {
+			if name != "*" && !m.Has(name) {
+				return nil, fmt.Errorf("service %s: cluster %q is not an enabled multiCluster.clusters entry", svc.Name, name)
+			}
+		}
+	}
+	return m, nil
+}
