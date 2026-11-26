@@ -74,6 +74,10 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
 - The admin's Settings page shows and saves the real settings: the API returned raw structs
   (`{"Port": 8080, "Timeout": 30000000000}`) and the page called helpers that did not exist, so
   every field was empty (COR-12, in part). Masked secrets are kept on save.
+- MongoDB records can be read, updated and deleted by ID: MongoDB stores generated IDs as
+  ObjectIDs, the driver returned them as hex strings, and querying with the string matched
+  nothing; updates also tried to change `_id`. This affected stored services, alerts, clusters,
+  plugins, users and API keys (COR-17).
 - Admin monitoring counts rejected requests with their real status (every 401, 404, 429 or 502
   used to be recorded as a 200), leaves out the admin's own pages and assets, measures the
   request rate over the last minute (it was the total divided by 60), and reports per-service

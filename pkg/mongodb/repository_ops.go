@@ -29,7 +29,7 @@ func (r *repository) GetAlert(ctx context.Context, id string) (*AlertDocument, e
 	col := r.database.Collection(AlertsCollection)
 
 	var alert AlertDocument
-	err := col.FindOne(ctx, bson.M{"_id": id}).Decode(&alert)
+	err := col.FindOne(ctx, idFilter(id)).Decode(&alert)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("alert not found: %s", id)
@@ -66,8 +66,8 @@ func (r *repository) UpdateAlert(ctx context.Context, id string, alert *AlertDoc
 	col := r.database.Collection(AlertsCollection)
 	result, err := col.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": alert},
+		idFilter(id),
+		setWithoutID(alert),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update alert: %w", err)
@@ -84,7 +84,7 @@ func (r *repository) ResolveAlert(ctx context.Context, id string) error {
 	col := r.database.Collection(AlertsCollection)
 	result, err := col.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
+		idFilter(id),
 		bson.M{
 			"$set": bson.M{
 				"status":   "resolved",
@@ -184,7 +184,7 @@ func (r *repository) GetCluster(ctx context.Context, id string) (*ClusterDocumen
 	col := r.database.Collection(ClustersCollection)
 
 	var cluster ClusterDocument
-	err := col.FindOne(ctx, bson.M{"_id": id}).Decode(&cluster)
+	err := col.FindOne(ctx, idFilter(id)).Decode(&cluster)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("cluster not found: %s", id)
@@ -223,8 +223,8 @@ func (r *repository) UpdateCluster(ctx context.Context, id string, cluster *Clus
 	col := r.database.Collection(ClustersCollection)
 	result, err := col.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": cluster},
+		idFilter(id),
+		setWithoutID(cluster),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update cluster: %w", err)
@@ -240,7 +240,7 @@ func (r *repository) UpdateCluster(ctx context.Context, id string, cluster *Clus
 
 func (r *repository) DeleteCluster(ctx context.Context, id string) error {
 	col := r.database.Collection(ClustersCollection)
-	result, err := col.DeleteOne(ctx, bson.M{"_id": id})
+	result, err := col.DeleteOne(ctx, idFilter(id))
 	if err != nil {
 		return fmt.Errorf("failed to delete cluster: %w", err)
 	}
@@ -273,7 +273,7 @@ func (r *repository) GetPlugin(ctx context.Context, id string) (*PluginDocument,
 	col := r.database.Collection(PluginsCollection)
 
 	var plugin PluginDocument
-	err := col.FindOne(ctx, bson.M{"_id": id}).Decode(&plugin)
+	err := col.FindOne(ctx, idFilter(id)).Decode(&plugin)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("plugin not found: %s", id)
@@ -312,8 +312,8 @@ func (r *repository) UpdatePlugin(ctx context.Context, id string, plugin *Plugin
 	col := r.database.Collection(PluginsCollection)
 	result, err := col.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": plugin},
+		idFilter(id),
+		setWithoutID(plugin),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update plugin: %w", err)
@@ -329,7 +329,7 @@ func (r *repository) UpdatePlugin(ctx context.Context, id string, plugin *Plugin
 
 func (r *repository) DeletePlugin(ctx context.Context, id string) error {
 	col := r.database.Collection(PluginsCollection)
-	result, err := col.DeleteOne(ctx, bson.M{"_id": id})
+	result, err := col.DeleteOne(ctx, idFilter(id))
 	if err != nil {
 		return fmt.Errorf("failed to delete plugin: %w", err)
 	}
@@ -362,7 +362,7 @@ func (r *repository) GetUser(ctx context.Context, id string) (*UserDocument, err
 	col := r.database.Collection(UsersCollection)
 
 	var user UserDocument
-	err := col.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
+	err := col.FindOne(ctx, idFilter(id)).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("user not found: %s", id)
@@ -411,8 +411,8 @@ func (r *repository) UpdateUser(ctx context.Context, id string, user *UserDocume
 	col := r.database.Collection(UsersCollection)
 	result, err := col.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": user},
+		idFilter(id),
+		setWithoutID(user),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
@@ -428,7 +428,7 @@ func (r *repository) UpdateUser(ctx context.Context, id string, user *UserDocume
 
 func (r *repository) DeleteUser(ctx context.Context, id string) error {
 	col := r.database.Collection(UsersCollection)
-	result, err := col.DeleteOne(ctx, bson.M{"_id": id})
+	result, err := col.DeleteOne(ctx, idFilter(id))
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
@@ -508,8 +508,8 @@ func (r *repository) UpdateAPIKey(ctx context.Context, id string, key *APIKeyDoc
 	col := r.database.Collection(APIKeysCollection)
 	result, err := col.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": key},
+		idFilter(id),
+		setWithoutID(key),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update API key: %w", err)
@@ -524,7 +524,7 @@ func (r *repository) UpdateAPIKey(ctx context.Context, id string, key *APIKeyDoc
 
 func (r *repository) DeleteAPIKey(ctx context.Context, id string) error {
 	col := r.database.Collection(APIKeysCollection)
-	result, err := col.DeleteOne(ctx, bson.M{"_id": id})
+	result, err := col.DeleteOne(ctx, idFilter(id))
 	if err != nil {
 		return fmt.Errorf("failed to delete API key: %w", err)
 	}

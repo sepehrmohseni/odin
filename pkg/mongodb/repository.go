@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -276,7 +277,7 @@ func (r *repository) GetService(ctx context.Context, id string) (*ServiceDocumen
 	col := r.database.Collection(ServicesCollection)
 
 	var service ServiceDocument
-	err := col.FindOne(ctx, bson.M{"_id": id}).Decode(&service)
+	err := col.FindOne(ctx, idFilter(id)).Decode(&service)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("service not found: %s", id)
@@ -330,8 +331,8 @@ func (r *repository) UpdateService(ctx context.Context, id string, service *Serv
 	col := r.database.Collection(ServicesCollection)
 	result, err := col.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": service},
+		idFilter(id),
+		setWithoutID(service),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update service: %w", err)
@@ -347,7 +348,7 @@ func (r *repository) UpdateService(ctx context.Context, id string, service *Serv
 
 func (r *repository) DeleteService(ctx context.Context, id string) error {
 	col := r.database.Collection(ServicesCollection)
-	result, err := col.DeleteOne(ctx, bson.M{"_id": id})
+	result, err := col.DeleteOne(ctx, idFilter(id))
 	if err != nil {
 		return fmt.Errorf("failed to delete service: %w", err)
 	}
@@ -729,4 +730,30 @@ func (n *noopRepository) Ping(ctx context.Context) error {
 }
 func (n *noopRepository) Close(ctx context.Context) error {
 	return nil
+}
+
+// idFilter matches a document by _id whether it is stored as an ObjectID (what MongoDB generates
+// on insert) or as a string. The driver hands ObjectIDs back as hex strings, and querying an
+// ObjectID _id with its hex string matches nothing, so getting, updating or deleting a record by
+// its ID never worked (AUDIT COR-17).
+func idFilter(id string) bson.M {
+	if oid, err := primitive.ObjectIDFromHex(id); err == nil {
+		return bson.M{"_id": bson.M{"$in": bson.A{oid, id}}}
+	}
+	return bson.M{"_id": id}
+}
+
+// setWithoutID is a $set of every field of doc except _id, which MongoDB does not allow an
+// update to change (and which would be the hex string of an ObjectID here).
+func setWithoutID(doc interface{}) bson.M {
+	raw, err := bson.Marshal(doc)
+	if err != nil {
+		return bson.M{"$set": doc}
+	}
+	var fields bson.M
+	if err := bson.Unmarshal(raw, &fields); err != nil {
+		return bson.M{"$set": doc}
+	}
+	delete(fields, "_id")
+	return bson.M{"$set": fields}
 }

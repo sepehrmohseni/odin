@@ -57,7 +57,6 @@ first. Effort: S = hours, M = a day or two, L = a week or more.
 | GraphQL: allow `__typename`, forward headers, keep upstream status, implement or drop query caching | [COR-10](docs/AUDIT.md#correctness) | S | Changes what clients receive |
 | Admin UI talks to the real API (JSON tags on config, `OdinAPI` methods, Postman routes) | [COR-12](docs/AUDIT.md#correctness) | M | Adds JSON field names to the config API |
 | One writer goroutine per monitoring WebSocket client | [COR-13](docs/AUDIT.md#correctness) | S | — |
-| MongoDB IDs: one representation (ObjectID) across repository and migration | [COR-17](docs/AUDIT.md#correctness) | M | Stored data |
 | Warn about unknown config keys (strict decoding with fallback) | [COR-24](docs/AUDIT.md#correctness) | S | Noisy for existing configs at first |
 | Newman runner: temp file, JSON reporter, correct TLS flag, timeouts | [SEC-26](docs/AUDIT.md#security) | S | — |
 | Raise `pkg/` coverage (now measured; was 9.5 %) and replace tests that re-implement code | [TST-01](docs/AUDIT.md#tests), TST-03, TST-05 | M | — |
