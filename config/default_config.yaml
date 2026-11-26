@@ -38,8 +38,8 @@ auth:
 admin:
   enabled: true
   username: admin
-  # Default password is 'admin' - change this in production
-  passwordHash: '$2a$10$3euPcmQFCiblsZeEu5s7p.9mSMuPJHj7nHnbGKgIZzJtLy0WsMUJO'
+  # There is no default password. Set ODIN_ADMIN_PASSWORD (or admin.passwordHash, a bcrypt hash);
+  # otherwise a random password is generated at startup and printed in the log.
 
 services:
   - name: users

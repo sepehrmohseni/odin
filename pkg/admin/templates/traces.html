@@ -323,15 +323,15 @@
                 const timestamp = new Date(trace.timestamp).toLocaleString();
                 
                 row.innerHTML = `
-                    <td><code>${trace.traceId.substring(0, 16)}...</code></td>
-                    <td>${timestamp}</td>
-                    <td><span class="badge bg-primary">${trace.method}</span></td>
-                    <td><code>${trace.path}</code></td>
-                    <td>${trace.service}</td>
-                    <td>${trace.duration.toFixed(2)}ms</td>
-                    <td><span class="trace-status ${statusClass}">${trace.status}</span></td>
+                    <td><code>${esc(String(trace.traceId).substring(0, 16))}...</code></td>
+                    <td>${esc(timestamp)}</td>
+                    <td><span class="badge bg-primary">${esc(trace.method)}</span></td>
+                    <td><code>${esc(trace.path)}</code></td>
+                    <td>${esc(trace.service)}</td>
+                    <td>${Number(trace.duration).toFixed(2)}ms</td>
+                    <td><span class="trace-status ${statusClass}">${esc(trace.status)}</span></td>
                     <td>
-                        <button class="btn btn-sm btn-outline-primary" onclick="viewTraceDetail('${trace.traceId}')">
+                        <button class="btn btn-sm btn-outline-primary" data-trace-id="${esc(trace.traceId)}" onclick="viewTraceDetail(this.dataset.traceId)">
                             <i class="bi bi-eye"></i> View
                         </button>
                     </td>
@@ -339,6 +339,13 @@
                 
                 tbody.appendChild(row);
             });
+        }
+
+        // Escape text before putting it into HTML: paths and service names come from requests.
+        function esc(value) {
+          return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+          })[ch]);
         }
 
         // View trace detail
@@ -353,35 +360,35 @@
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <strong>Trace ID:</strong><br>
-                        <code>${trace.traceId}</code>
+                        <code>${esc(trace.traceId)}</code>
                     </div>
                     <div class="col-md-6">
                         <strong>Span ID:</strong><br>
-                        <code>${trace.spanId}</code>
+                        <code>${esc(trace.spanId)}</code>
                     </div>
                 </div>
                 <div class="row mb-3">
                     <div class="col-md-3">
                         <strong>Method:</strong><br>
-                        <span class="badge bg-primary">${trace.method}</span>
+                        <span class="badge bg-primary">${esc(trace.method)}</span>
                     </div>
                     <div class="col-md-3">
                         <strong>Status:</strong><br>
-                        <span class="trace-status ${statusClass}">${trace.status}</span>
+                        <span class="trace-status ${statusClass}">${esc(trace.status)}</span>
                     </div>
                     <div class="col-md-3">
                         <strong>Duration:</strong><br>
-                        ${trace.duration.toFixed(2)}ms
+                        ${Number(trace.duration).toFixed(2)}ms
                     </div>
                     <div class="col-md-3">
                         <strong>Service:</strong><br>
-                        ${trace.service}
+                        ${esc(trace.service)}
                     </div>
                 </div>
                 <div class="row mb-3">
                     <div class="col-12">
                         <strong>Path:</strong><br>
-                        <code>${trace.path}</code>
+                        <code>${esc(trace.path)}</code>
                     </div>
                 </div>
                 <div class="row mb-3">
@@ -395,7 +402,7 @@
                         <strong>Timeline:</strong>
                         <div class="mt-2 p-3 bg-light rounded">
                             <div class="span-bar span-${statusClass}" style="width: 100%; text-align: center; color: white;">
-                                ${trace.method} ${trace.path} (${trace.duration.toFixed(2)}ms)
+                                ${esc(trace.method)} ${esc(trace.path)} (${Number(trace.duration).toFixed(2)}ms)
                             </div>
                         </div>
                     </div>

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"odin/pkg/config"
@@ -211,8 +212,8 @@ func (h *IntegrationHandler) GetConfig(c echo.Context) error {
 		})
 	}
 
-	// Mask API key
-	config.APIKey = "****" + config.APIKey[len(config.APIKey)-4:]
+	// Mask API key (never send it back to the browser)
+	config.APIKey = maskAPIKey(config.APIKey)
 
 	return c.JSON(http.StatusOK, config)
 }
@@ -229,6 +230,16 @@ func (h *IntegrationHandler) SaveConfig(c echo.Context) error {
 	}
 
 	config.Provider = "postman"
+
+	// The form shows the masked key; when it comes back masked (or empty), keep the stored key
+	// instead of saving "****abcd" over it.
+	if config.APIKey == "" || strings.HasPrefix(config.APIKey, "****") {
+		existing, err := h.repository.GetConfig(ctx)
+		if err != nil || existing == nil || existing.APIKey == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "an API key is required"})
+		}
+		config.APIKey = existing.APIKey
+	}
 
 	if err := h.repository.SaveConfig(ctx, &config); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -754,4 +765,12 @@ func (h *IntegrationHandler) GetTestStats(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, stats)
+}
+
+// maskAPIKey shows only the last four characters, and nothing of keys too short for that.
+func maskAPIKey(key string) string {
+	if len(key) <= 8 {
+		return "****"
+	}
+	return "****" + key[len(key)-4:]
 }

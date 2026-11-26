@@ -2,8 +2,11 @@ package admin
 
 import (
 	"fmt"
+	"html"
 	"net/http"
+	"net/url"
 	"odin/pkg/config"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,11 +16,19 @@ import (
 )
 
 func (h *AdminHandler) handleListServices(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+	return h.renderServiceList(c)
+}
+
+// renderServiceList writes the service table. Callers hold configMu. Every value is escaped:
+// service names and targets come from admin input and must not be able to inject markup.
+func (h *AdminHandler) renderServiceList(c echo.Context) error {
 	if len(h.config.Services) == 0 {
 		return c.HTML(http.StatusOK, `<div class="alert alert-info">No services configured. Add a new service to get started.</div>`)
 	}
 
-	html := `<table class="table table-striped mt-4">
+	out := `<table class="table table-striped mt-4">
 		<thead>
 			<tr>
 				<th>Name</th>
@@ -31,7 +42,10 @@ func (h *AdminHandler) handleListServices(c echo.Context) error {
 	`
 
 	for _, svc := range h.config.Services {
-		targets := svc.Targets[0]
+		targets := ""
+		if len(svc.Targets) > 0 {
+			targets = svc.Targets[0]
+		}
 		if len(svc.Targets) > 1 {
 			targets += " +" + fmt.Sprint(len(svc.Targets)-1)
 		}
@@ -41,7 +55,7 @@ func (h *AdminHandler) handleListServices(c echo.Context) error {
 			authStatus = "Not Required"
 		}
 
-		html += fmt.Sprintf(`
+		out += fmt.Sprintf(`
 			<tr>
 				<td>%s</td>
 				<td>%s</td>
@@ -56,18 +70,21 @@ func (h *AdminHandler) handleListServices(c echo.Context) error {
 							hx-swap="innerHTML">Delete</button>
 				</td>
 			</tr>
-		`, svc.Name, svc.BasePath, targets, authStatus, svc.Name, svc.Name)
+		`, html.EscapeString(svc.Name), html.EscapeString(svc.BasePath), html.EscapeString(targets), authStatus,
+			html.EscapeString(url.PathEscape(svc.Name)), html.EscapeString(url.PathEscape(svc.Name)))
 	}
 
-	html += `
+	out += `
 		</tbody>
 	</table>
 	`
 
-	return c.HTML(http.StatusOK, html)
+	return c.HTML(http.StatusOK, out)
 }
 
 func (h *AdminHandler) handleNewService(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
 	data := map[string]interface{}{
 		"AvailableServices": h.config.Services,
 	}
@@ -75,6 +92,8 @@ func (h *AdminHandler) handleNewService(c echo.Context) error {
 }
 
 func (h *AdminHandler) handleEditService(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
 	name := c.Param("name")
 
 	var svc *config.ServiceConfig
@@ -111,8 +130,17 @@ func (h *AdminHandler) handleEditService(c echo.Context) error {
 }
 
 func (h *AdminHandler) handleAddService(c echo.Context) error {
-	name := c.FormValue("name")
-	basePath := c.FormValue("basePath")
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	name := strings.TrimSpace(c.FormValue("name"))
+	basePath := strings.TrimSpace(c.FormValue("basePath"))
+	if err := validateServiceName(name); err != nil {
+		return alertHTML(c, http.StatusBadRequest, err.Error())
+	}
+	if err := validateBasePath(basePath); err != nil {
+		return alertHTML(c, http.StatusBadRequest, err.Error())
+	}
 
 	for _, svc := range h.config.Services {
 		if svc.Name == name {
@@ -121,8 +149,8 @@ func (h *AdminHandler) handleAddService(c echo.Context) error {
 	}
 
 	targets := parseMultilineInput(c.FormValue("targets"))
-	if len(targets) == 0 {
-		return c.HTML(http.StatusBadRequest, `<div class="alert alert-danger">At least one target URL is required</div>`)
+	if err := validateTargets(targets); err != nil {
+		return alertHTML(c, http.StatusBadRequest, err.Error())
 	}
 
 	enableAggregation := c.FormValue("enableAggregation") == "on"
@@ -144,18 +172,22 @@ func (h *AdminHandler) handleAddService(c echo.Context) error {
 	h.config.Services = append(h.config.Services, newSvc)
 
 	if err := h.saveConfig(); err != nil {
-		return c.HTML(http.StatusInternalServerError, `<div class="alert alert-danger">Failed to save configuration: `+err.Error()+`</div>`)
+		h.config.Services = h.config.Services[:len(h.config.Services)-1]
+		return alertHTML(c, http.StatusInternalServerError, "Failed to save configuration: "+err.Error())
 	}
 
 	return c.HTML(http.StatusOK, `
 		<div class="alert alert-success">
-			Service added successfully! 
+			Service added. Restart the gateway to start routing it.
 			<a href="/admin/dashboard">Return to dashboard</a>
 		</div>
 	`)
 }
 
 func (h *AdminHandler) handleUpdateService(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	name := c.Param("name")
 
 	var svcIndex = -1
@@ -169,10 +201,17 @@ func (h *AdminHandler) handleUpdateService(c echo.Context) error {
 	if svcIndex == -1 {
 		return c.HTML(http.StatusNotFound, `<div class="alert alert-danger">Service not found</div>`)
 	}
+	if src := h.config.Services[svcIndex].Source; src != "" {
+		return alertHTML(c, http.StatusConflict, "This service is defined in "+src+"; edit that file instead.")
+	}
 
+	basePath := strings.TrimSpace(c.FormValue("basePath"))
+	if err := validateBasePath(basePath); err != nil {
+		return alertHTML(c, http.StatusBadRequest, err.Error())
+	}
 	targets := parseMultilineInput(c.FormValue("targets"))
-	if len(targets) == 0 {
-		return c.HTML(http.StatusBadRequest, `<div class="alert alert-danger">At least one target URL is required</div>`)
+	if err := validateTargets(targets); err != nil {
+		return alertHTML(c, http.StatusBadRequest, err.Error())
 	}
 
 	// Parse timeout
@@ -190,7 +229,8 @@ func (h *AdminHandler) handleUpdateService(c echo.Context) error {
 	}
 
 	// Update service configuration
-	h.config.Services[svcIndex].BasePath = c.FormValue("basePath")
+	previous := h.config.Services[svcIndex]
+	h.config.Services[svcIndex].BasePath = basePath
 	h.config.Services[svcIndex].Targets = targets
 	h.config.Services[svcIndex].StripBasePath = c.FormValue("stripBasePath") == "true"
 	h.config.Services[svcIndex].Authentication = c.FormValue("authentication") == "true"
@@ -200,6 +240,7 @@ func (h *AdminHandler) handleUpdateService(c echo.Context) error {
 
 	// Save configuration
 	if err := h.saveConfig(); err != nil {
+		h.config.Services[svcIndex] = previous
 		return c.HTML(http.StatusInternalServerError, `<div class="alert alert-danger">Failed to save configuration</div>`)
 	}
 
@@ -208,30 +249,73 @@ func (h *AdminHandler) handleUpdateService(c echo.Context) error {
 		"action":  "update",
 	}).Info("Service updated")
 
-	return c.HTML(http.StatusOK, `<div class="alert alert-success">Service updated successfully</div>`)
+	return c.HTML(http.StatusOK, `<div class="alert alert-success">Service updated. Restart the gateway to apply the change.</div>`)
 }
 
 func (h *AdminHandler) handleDeleteService(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	name := c.Param("name")
 
-	var found bool
+	index := -1
 	for i, svc := range h.config.Services {
 		if svc.Name == name {
-			h.config.Services = append(h.config.Services[:i], h.config.Services[i+1:]...)
-			found = true
+			index = i
 			break
 		}
 	}
 
-	if !found {
+	if index == -1 {
 		return c.HTML(http.StatusNotFound, `<div class="alert alert-danger">Service not found</div>`)
 	}
-
-	if err := h.saveConfig(); err != nil {
-		return c.HTML(http.StatusInternalServerError, `<div class="alert alert-danger">Failed to save configuration: `+err.Error()+`</div>`)
+	if src := h.config.Services[index].Source; src != "" {
+		return alertHTML(c, http.StatusConflict, "This service is defined in "+src+"; edit that file instead.")
 	}
 
-	return h.handleListServices(c)
+	previous := h.config.Services
+	h.config.Services = append(append([]config.ServiceConfig{}, previous[:index]...), previous[index+1:]...)
+
+	if err := h.saveConfig(); err != nil {
+		h.config.Services = previous
+		return alertHTML(c, http.StatusInternalServerError, "Failed to save configuration: "+err.Error())
+	}
+
+	return h.renderServiceList(c)
+}
+
+var serviceNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+func validateServiceName(name string) error {
+	if !serviceNamePattern.MatchString(name) {
+		return fmt.Errorf("service name must be 1-64 letters, digits, '.', '_' or '-'")
+	}
+	return nil
+}
+
+func validateBasePath(p string) error {
+	if !strings.HasPrefix(p, "/") || strings.ContainsAny(p, " \t\n\"'<>") {
+		return fmt.Errorf("base path must start with '/' and contain no spaces or quotes")
+	}
+	return nil
+}
+
+func validateTargets(targets []string) error {
+	if len(targets) == 0 {
+		return fmt.Errorf("at least one target URL is required")
+	}
+	for _, t := range targets {
+		u, err := url.Parse(t)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("invalid target %q: use http(s)://host[:port]", t)
+		}
+	}
+	return nil
+}
+
+// alertHTML renders an error alert with the message escaped.
+func alertHTML(c echo.Context, status int, message string) error {
+	return c.HTML(status, `<div class="alert alert-danger">`+html.EscapeString(message)+`</div>`)
 }
 
 func parseMultilineInput(input string) []string {

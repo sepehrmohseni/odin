@@ -369,17 +369,19 @@ function loadCollections() {
             if (data.collections && data.collections.length > 0) {
                 data.collections.forEach(col => {
                     const row = document.createElement('tr');
+                    // Collection names and descriptions come from Postman: escape them, and pass
+                    // values to handlers through data attributes rather than inline JS strings.
                     row.innerHTML = `
-                        <td>${col.name}</td>
-                        <td>${col.info?.description || '-'}</td>
+                        <td>${esc(col.name)}</td>
+                        <td>${esc(col.info?.description || '-')}</td>
                         <td>
-                            <button class="btn btn-sm btn-primary" onclick="showImportModal('${col.uid}', '${col.name}')">
+                            <button class="btn btn-sm btn-primary" data-uid="${esc(col.uid)}" data-name="${esc(col.name)}" onclick="showImportModal(this.dataset.uid, this.dataset.name)">
                                 Import
                             </button>
-                            <button class="btn btn-sm btn-outline-primary" onclick="runTests('${col.uid}')">
+                            <button class="btn btn-sm btn-outline-primary" data-uid="${esc(col.uid)}" onclick="runTests(this.dataset.uid)">
                                 Test
                             </button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="viewCollection('${col.uid}')">
+                            <button class="btn btn-sm btn-outline-secondary" data-uid="${esc(col.uid)}" onclick="viewCollection(this.dataset.uid)">
                                 View
                             </button>
                         </td>
@@ -401,6 +403,13 @@ function loadCollections() {
 }
 
 // Show import modal
+// Escape text before putting it into HTML.
+function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[ch]);
+}
+
 function showImportModal(collectionId, collectionName) {
     document.getElementById('import-collection-id').value = collectionId;
     document.getElementById('import-service-name').value = collectionName.toLowerCase().replace(/\s+/g, '-');

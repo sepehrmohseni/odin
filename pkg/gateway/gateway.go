@@ -521,8 +521,18 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		return nil, fmt.Errorf("failed to register routes: %w", err)
 	}
 
-	adminHandler.Register(e)
-	logger.Info("Admin interface registered at /admin")
+	// The admin is only mounted when enabled. (It used to be mounted always, with its auth
+	// middleware skipped when admin.enabled was false, which left every admin API, including
+	// plugin upload, open to anyone.)
+	if cfg.Admin.Enabled {
+		if cacheStore != nil {
+			adminHandler.SetCacheStore(cacheStore)
+		}
+		adminHandler.Register(e)
+		logger.Info("Admin interface registered at /admin")
+	} else {
+		logger.Info("Admin interface disabled (admin.enabled is false)")
+	}
 
 	// Start monitoring metrics broadcaster
 	collector := admin.GetCollector()

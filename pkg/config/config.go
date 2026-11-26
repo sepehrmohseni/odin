@@ -54,6 +54,8 @@ type AdminConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	// PasswordHash is a bcrypt hash of the admin password; when set, Password is ignored.
+	PasswordHash string `yaml:"passwordHash"`
 }
 
 type PluginsConfig struct {
@@ -280,6 +282,11 @@ type ServiceConfig struct {
 	GraphQL        *GraphQLConfig     `yaml:"graphql,omitempty"`
 	GRPC           *GRPCConfig        `yaml:"grpc,omitempty"`
 	HealthCheck    *HealthCheckConfig `yaml:"healthCheck,omitempty"`
+
+	// Source is the file a service was loaded from when it is not the main config file (for
+	// example services.yaml). It is not part of the YAML; the admin uses it to avoid writing
+	// those services into config.yaml.
+	Source string `yaml:"-" json:"-"`
 }
 
 type TransformConfig struct {
@@ -418,8 +425,25 @@ func Load(configPath string, logger *logrus.Logger) (*Config, error) {
 			var servicesConfig struct {
 				Services []ServiceConfig `yaml:"services"`
 			}
-			if err := yaml.Unmarshal(servicesData, &servicesConfig); err == nil {
-				config.Services = append(config.Services, servicesConfig.Services...)
+			if err := yaml.Unmarshal(servicesData, &servicesConfig); err != nil {
+				return nil, fmt.Errorf("failed to parse %s: %w", servicesPath, err)
+			}
+			// A service defined in both files keeps its config.yaml definition. (Older admin
+			// versions copied services.yaml entries into config.yaml on every save.)
+			defined := make(map[string]bool, len(config.Services))
+			for _, svc := range config.Services {
+				defined[svc.Name] = true
+			}
+			for _, svc := range servicesConfig.Services {
+				if defined[svc.Name] {
+					if logger != nil {
+						logger.Warnf("Service %q is defined in both %s and %s; using the one in %s",
+							svc.Name, configPath, servicesPath, configPath)
+					}
+					continue
+				}
+				svc.Source = servicesPath
+				config.Services = append(config.Services, svc)
 			}
 		}
 	}

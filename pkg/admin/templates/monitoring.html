@@ -420,6 +420,13 @@
         charts.statusCodes.update('none');
       }
 
+      // Escape text before putting it into HTML: paths and service names come from requests.
+      function esc(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[ch]);
+      }
+
       // Update service status
       function updateServiceStatus(services) {
         const container = document.getElementById('service-status-list');
@@ -434,8 +441,8 @@
           div.innerHTML = `
             <div>
               <span class="status-indicator ${statusClass}"></span>
-              <strong>${service.name}</strong>
-              <small class="text-muted">(${service.protocol})</small>
+              <strong>${esc(service.name)}</strong>
+              <small class="text-muted">(${esc(service.protocol)})</small>
             </div>
             <div>
               <small>${service.responseTime.toFixed(2)}ms</small>
@@ -459,9 +466,9 @@
           div.innerHTML = `
             <div class="d-flex justify-content-between align-items-start">
               <div>
-                <strong>${trace.method}</strong> ${trace.path}
+                <strong>${esc(trace.method)}</strong> ${esc(trace.path)}
                 <br>
-                <small class="text-muted">${trace.service} • ${new Date(trace.timestamp).toLocaleTimeString()}</small>
+                <small class="text-muted">${esc(trace.service)} • ${new Date(trace.timestamp).toLocaleTimeString()}</small>
               </div>
               <span class="duration-badge ${durationClass}">${trace.duration.toFixed(2)}ms</span>
             </div>

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,8 +87,15 @@ func NewMonitoringCollector() *MonitoringCollector {
 var (
 	collector *MonitoringCollector
 	upgrader  = websocket.Upgrader{
+		// Only the admin's own pages may open the monitoring socket; otherwise any site could
+		// read live traffic data with the admin's cookie (cross-site WebSocket hijacking).
 		CheckOrigin: func(r *http.Request) bool {
-			return true // Allow connections from any origin in development
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true // not a browser
+			}
+			u, err := url.Parse(origin)
+			return err == nil && strings.EqualFold(u.Host, r.Host)
 		},
 	}
 )

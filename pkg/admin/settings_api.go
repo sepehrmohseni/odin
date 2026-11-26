@@ -18,6 +18,7 @@ import (
 type SettingsHandler struct {
 	configPath string
 	config     *config.Config
+	cacheStore interface{ Clear() } // the response cache, when enabled
 }
 
 // NewSettingsHandler creates a new settings handler
@@ -30,7 +31,7 @@ func NewSettingsHandler(configPath string, cfg *config.Config) *SettingsHandler 
 
 // GetAllSettings returns all gateway settings
 func (h *SettingsHandler) GetAllSettings(c echo.Context) error {
-	return c.JSON(http.StatusOK, h.config)
+	return c.JSON(http.StatusOK, redactConfig(h.config))
 }
 
 // GetServerSettings returns server configuration
@@ -42,6 +43,9 @@ func (h *SettingsHandler) GetServerSettings(c echo.Context) error {
 
 // UpdateServerSettings updates server configuration
 func (h *SettingsHandler) UpdateServerSettings(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	var req struct {
 		Port            int    `json:"port"`
 		Timeout         string `json:"timeout"`
@@ -108,6 +112,9 @@ func (h *SettingsHandler) GetLoggingSettings(c echo.Context) error {
 
 // UpdateLoggingSettings updates logging configuration
 func (h *SettingsHandler) UpdateLoggingSettings(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	var req struct {
 		Level string `json:"level"`
 		JSON  bool   `json:"json"`
@@ -140,12 +147,15 @@ func (h *SettingsHandler) UpdateLoggingSettings(c echo.Context) error {
 // GetRateLimitSettings returns rate limiting configuration
 func (h *SettingsHandler) GetRateLimitSettings(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"rateLimit": h.config.RateLimit,
+		"rateLimit": redactConfig(h.config).RateLimit,
 	})
 }
 
 // UpdateRateLimitSettings updates rate limiting configuration
 func (h *SettingsHandler) UpdateRateLimitSettings(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	var req struct {
 		Enabled  bool   `json:"enabled"`
 		Limit    int    `json:"limit"`
@@ -173,7 +183,7 @@ func (h *SettingsHandler) UpdateRateLimitSettings(c echo.Context) error {
 	h.config.RateLimit.Limit = req.Limit
 	h.config.RateLimit.Duration = duration
 	h.config.RateLimit.Strategy = req.Strategy
-	h.config.RateLimit.RedisURL = req.RedisURL
+	h.config.RateLimit.RedisURL = keepSecretURL(req.RedisURL, h.config.RateLimit.RedisURL)
 
 	// Save to file
 	if err := h.saveConfig(); err != nil {
@@ -188,12 +198,15 @@ func (h *SettingsHandler) UpdateRateLimitSettings(c echo.Context) error {
 // GetCacheSettings returns cache configuration
 func (h *SettingsHandler) GetCacheSettings(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"cache": h.config.Cache,
+		"cache": redactConfig(h.config).Cache,
 	})
 }
 
 // UpdateCacheSettings updates cache configuration
 func (h *SettingsHandler) UpdateCacheSettings(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	var req struct {
 		Enabled     bool   `json:"enabled"`
 		TTL         string `json:"ttl"`
@@ -220,7 +233,7 @@ func (h *SettingsHandler) UpdateCacheSettings(c echo.Context) error {
 	// Update config
 	h.config.Cache.Enabled = req.Enabled
 	h.config.Cache.TTL = ttl
-	h.config.Cache.RedisURL = req.RedisURL
+	h.config.Cache.RedisURL = keepSecretURL(req.RedisURL, h.config.Cache.RedisURL)
 	h.config.Cache.Strategy = req.Strategy
 	h.config.Cache.MaxSizeInMB = req.MaxSizeInMB
 
@@ -243,6 +256,9 @@ func (h *SettingsHandler) GetMonitoringSettings(c echo.Context) error {
 
 // UpdateMonitoringSettings updates monitoring configuration
 func (h *SettingsHandler) UpdateMonitoringSettings(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	var req struct {
 		Enabled    bool   `json:"enabled"`
 		Path       string `json:"path"`
@@ -277,6 +293,9 @@ func (h *SettingsHandler) GetTracingSettings(c echo.Context) error {
 
 // UpdateTracingSettings updates tracing configuration
 func (h *SettingsHandler) UpdateTracingSettings(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	var req struct {
 		Enabled        bool    `json:"enabled"`
 		ServiceName    string  `json:"serviceName"`
@@ -346,7 +365,8 @@ func (h *SettingsHandler) GetGatewayInfo(c echo.Context) error {
 
 // ExportConfig exports the current configuration
 func (h *SettingsHandler) ExportConfig(c echo.Context) error {
-	data, err := yaml.Marshal(h.config)
+	// Secrets are masked in the export; keep them in your secret store, not in downloads.
+	data, err := yaml.Marshal(redactConfig(h.config))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to marshal configuration"})
 	}
@@ -398,25 +418,13 @@ func (h *SettingsHandler) ValidateConfig(c echo.Context) error {
 	})
 }
 
-// saveConfig saves the current configuration to file
+// saveConfig saves the current configuration to file. Callers hold configMu.
 func (h *SettingsHandler) saveConfig() error {
-	data, err := yaml.Marshal(h.config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	// Create backup
 	backupPath := h.configPath + ".backup-" + time.Now().Format("20060102-150405")
-	if err := h.createBackup(backupPath); err != nil {
+	if err := h.createBackup(backupPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
-
-	// Write new config
-	if err := os.WriteFile(h.configPath, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
-	}
-
-	return nil
+	return writeConfigFile(h.configPath, h.config)
 }
 
 // createBackup creates a backup of the current configuration
@@ -471,6 +479,9 @@ func (h *SettingsHandler) GetConfigBackups(c echo.Context) error {
 
 // RestoreConfigBackup restores a configuration backup
 func (h *SettingsHandler) RestoreConfigBackup(c echo.Context) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	backupName := c.Param("name")
 	// Only a plain file name inside the backups directory: no separators, no "..".
 	if backupName == "" || backupName != filepath.Base(backupName) || strings.HasPrefix(backupName, ".") {
@@ -501,9 +512,9 @@ func (h *SettingsHandler) RestoreConfigBackup(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to restore backup"})
 	}
 
-	// Reload config
-	newConfig := testConfig
-	h.config = &newConfig
+	// Update the shared config in place, so the service editor (which holds the same pointer)
+	// does not later write the old configuration back over the restored file.
+	*h.config = testConfig
 
 	return c.JSON(http.StatusOK, map[string]string{
 		"message": "Configuration restored successfully. Restart required to apply changes.",
@@ -524,27 +535,26 @@ func (h *SettingsHandler) GetSystemStats(c echo.Context) error {
 	})
 }
 
-// ClearCache clears the gateway cache
+// ClearCache clears the gateway's response cache.
 func (h *SettingsHandler) ClearCache(c echo.Context) error {
-	// This would need to interact with the actual cache store
-	// For now, return a placeholder response
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "Cache cleared successfully",
-	})
+	if h.cacheStore == nil {
+		return c.JSON(http.StatusConflict, map[string]string{"error": "Response caching is not enabled"})
+	}
+	h.cacheStore.Clear()
+	return c.JSON(http.StatusOK, map[string]string{"message": "Cache cleared"})
 }
 
-// ReloadConfig reloads the configuration from file
+// ReloadConfig would apply the configuration without a restart. That is not supported yet, so
+// say so instead of reporting a reload that does not happen.
 func (h *SettingsHandler) ReloadConfig(c echo.Context) error {
-	// This would trigger a configuration reload
-	// For now, return a placeholder response
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "Configuration reload initiated. This requires a restart to take full effect.",
+	return c.JSON(http.StatusNotImplemented, map[string]string{
+		"error": "Live reload is not supported yet; restart the gateway to apply configuration changes.",
 	})
 }
 
 // GetConfigAsJSON returns the current configuration as JSON
 func (h *SettingsHandler) GetConfigAsJSON(c echo.Context) error {
-	data, err := json.MarshalIndent(h.config, "", "  ")
+	data, err := json.MarshalIndent(redactConfig(h.config), "", "  ")
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to marshal configuration"})
 	}

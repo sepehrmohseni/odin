@@ -18,6 +18,8 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 	adminGroup.GET("", h.handleLogin)
 	adminGroup.GET("/login", h.handleLogin)
 	adminGroup.POST("/login", h.handleLoginPost)
+	adminGroup.POST("/logout", h.handleLogout)
+	adminGroup.GET("/logout", h.handleLogout)
 
 	protected := adminGroup.Group("")
 	protected.Use(h.basicAuthMiddleware)
@@ -35,9 +37,6 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 	// Middleware chain management
 	protected.GET("/middleware-chain", h.handleMiddlewareChain)
 
-	// Debug endpoint for testing (remove in production)
-	adminGroup.GET("/debug/metrics", GetMetricsAPI)
-
 	protected.GET("/services", h.handleListServices)
 	protected.GET("/services/new", h.handleNewService)
 	protected.POST("/services", h.handleAddService)
@@ -47,6 +46,9 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 
 	// Settings API routes
 	settingsHandler := NewSettingsHandler(h.configPath, h.config)
+	if h.cacheStore != nil {
+		settingsHandler.cacheStore = h.cacheStore
+	}
 
 	protected.GET("/settings", h.handleSettings)
 	protected.GET("/api/settings", settingsHandler.GetAllSettings)
