@@ -1,0 +1,787 @@
+/*
+ * Odin admin theme, on top of Bootstrap 5.3.
+ * Neutral ink, one accent (the docs site's teal), flat surfaces, dense tables.
+ * Light and dark follow data-bs-theme on <html>.
+ */
+
+:root,
+[data-bs-theme="light"] {
+  --odin-bg: #f4f5f7;
+  --odin-surface: #ffffff;
+  --odin-surface-2: #f8f9fa;
+  --odin-border: #e2e5ea;
+  --odin-border-strong: #cfd4db;
+  --odin-text: #16181d;
+  --odin-muted: #5f6673;
+  --odin-faint: #8a909b;
+  --odin-accent: #0b6e7a;
+  --odin-accent-hover: #095b65;
+  --odin-accent-soft: rgba(11, 110, 122, 0.09);
+  --odin-ok: #1d7a4c;
+  --odin-ok-soft: rgba(29, 122, 76, 0.1);
+  --odin-warn: #9a6200;
+  --odin-warn-soft: rgba(154, 98, 0, 0.1);
+  --odin-bad: #b42318;
+  --odin-bad-soft: rgba(180, 35, 24, 0.09);
+  --odin-sidebar: #14161b;
+  --odin-sidebar-text: #aeb4bf;
+  --odin-sidebar-active: #ffffff;
+
+  --bs-body-bg: var(--odin-bg);
+  --bs-body-color: var(--odin-text);
+  --bs-secondary-color: var(--odin-muted);
+  --bs-tertiary-bg: var(--odin-surface-2);
+  --bs-border-color: var(--odin-border);
+  --bs-primary: var(--odin-accent);
+  --bs-primary-rgb: 11, 110, 122;
+  --bs-link-color: var(--odin-accent);
+  --bs-link-color-rgb: 11, 110, 122;
+  --bs-link-hover-color: var(--odin-accent-hover);
+  --bs-link-hover-color-rgb: 9, 91, 101;
+  --bs-emphasis-color: var(--odin-text);
+}
+
+[data-bs-theme="dark"] {
+  --odin-bg: #0f1115;
+  --odin-surface: #161920;
+  --odin-surface-2: #1b1f27;
+  --odin-border: #262b35;
+  --odin-border-strong: #343a46;
+  --odin-text: #e6e8ec;
+  --odin-muted: #9aa1ad;
+  --odin-faint: #6f7682;
+  --odin-accent: #4fc3cf;
+  --odin-accent-hover: #74d3dc;
+  --odin-accent-soft: rgba(79, 195, 207, 0.12);
+  --odin-ok: #4cc38a;
+  --odin-ok-soft: rgba(76, 195, 138, 0.12);
+  --odin-warn: #e2a336;
+  --odin-warn-soft: rgba(226, 163, 54, 0.12);
+  --odin-bad: #f0716a;
+  --odin-bad-soft: rgba(240, 113, 106, 0.12);
+  --odin-sidebar: #0b0d10;
+
+  --bs-body-bg: var(--odin-bg);
+  --bs-body-color: var(--odin-text);
+  --bs-secondary-color: var(--odin-muted);
+  --bs-tertiary-bg: var(--odin-surface-2);
+  --bs-border-color: var(--odin-border);
+  --bs-primary: var(--odin-accent);
+  --bs-primary-rgb: 79, 195, 207;
+  --bs-link-color: var(--odin-accent);
+  --bs-link-color-rgb: 79, 195, 207;
+  --bs-link-hover-color: var(--odin-accent-hover);
+  --bs-emphasis-color: var(--odin-text);
+}
+
+/* ---------- Base ---------- */
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  background: var(--odin-bg);
+  color: var(--odin-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+kbd,
+pre,
+.font-monospace,
+.mono {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+code {
+  color: inherit;
+  background: var(--odin-surface-2);
+  border: 1px solid var(--odin-border);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--odin-text);
+}
+
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.15rem; }
+h4, h5 { font-size: 1rem; }
+
+a {
+  text-underline-offset: 2px;
+}
+
+.text-muted {
+  color: var(--odin-muted) !important;
+}
+
+/* ---------- Shell ---------- */
+
+.odin-shell {
+  display: grid;
+  grid-template-columns: 228px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.odin-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--odin-sidebar);
+  color: var(--odin-sidebar-text);
+  padding: 1rem 0.75rem;
+  overflow-y: auto;
+}
+
+.odin-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.25rem 0.5rem 1.1rem;
+  color: #fff;
+  text-decoration: none;
+}
+
+.odin-brand img {
+  width: 30px;
+  height: 30px;
+}
+
+.odin-brand strong {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.odin-brand small {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--odin-sidebar-text);
+  margin-top: -2px;
+}
+
+.odin-nav-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6c727d;
+  padding: 0.9rem 0.6rem 0.35rem;
+}
+
+.odin-nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 5px;
+  color: var(--odin-sidebar-text);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.odin-nav a .bi {
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+
+.odin-nav a:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.odin-nav a.active {
+  color: var(--odin-sidebar-active);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 2px 0 0 #4fc3cf;
+}
+
+.odin-sidebar-foot {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  display: grid;
+  gap: 0.15rem;
+}
+
+.odin-sidebar-foot a,
+.odin-sidebar-foot button {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--odin-sidebar-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.odin-sidebar-foot a:hover,
+.odin-sidebar-foot button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.odin-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.odin-page {
+  flex: 1;
+  width: 100%;
+  max-width: 1360px;
+  padding: 1.5rem 2rem 2rem;
+}
+
+.odin-page > .container,
+.odin-page > .container-fluid {
+  max-width: none;
+  padding: 0;
+}
+
+.odin-demo-banner {
+  background: var(--odin-warn-soft);
+  color: var(--odin-warn);
+  border-bottom: 1px solid var(--odin-border);
+  padding: 0.45rem 2rem;
+  font-size: 0.8125rem;
+}
+
+.odin-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  padding: 1rem 2rem 1.5rem;
+  color: var(--odin-faint);
+  font-size: 0.78rem;
+  border-top: 1px solid var(--odin-border);
+}
+
+.odin-footer a {
+  color: var(--odin-muted);
+  text-decoration: none;
+}
+
+.odin-footer a:hover {
+  color: var(--odin-accent);
+}
+
+/* ---------- Page header ---------- */
+
+.odin-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.odin-head h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.odin-head p {
+  margin: 0.2rem 0 0;
+  color: var(--odin-muted);
+}
+
+.odin-head .actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Older pages put an h2 with an icon in a row; keep them in the same register. */
+.odin-page > .row:first-child h2,
+.odin-page h2 > .bi:first-child {
+  font-size: 1.35rem;
+}
+
+/* ---------- Surfaces ---------- */
+
+.card,
+.odin-panel {
+  background: var(--odin-surface);
+  border: 1px solid var(--odin-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.card-header,
+.odin-panel > header {
+  background: transparent;
+  border-bottom: 1px solid var(--odin-border);
+  padding: 0.7rem 1rem;
+  font-weight: 600;
+}
+
+.odin-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.odin-panel > header h2 {
+  font-size: 0.9375rem;
+  margin: 0;
+}
+
+.odin-panel > header .hint {
+  color: var(--odin-faint);
+  font-weight: 400;
+  font-size: 0.78rem;
+}
+
+.card-title {
+  font-size: 0.9375rem;
+}
+
+.odin-panel > .body {
+  padding: 1rem;
+}
+
+.odin-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.odin-grid.two {
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+}
+
+@media (max-width: 1100px) {
+  .odin-grid.two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- Stats ---------- */
+
+.odin-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border: 1px solid var(--odin-border);
+  border-radius: 8px;
+  background: var(--odin-surface);
+  margin-bottom: 1rem;
+}
+
+.odin-stat {
+  padding: 0.85rem 1rem 0.9rem;
+  border-right: 1px solid var(--odin-border);
+  min-width: 0;
+}
+
+.odin-stat:last-child {
+  border-right: 0;
+}
+
+.odin-stat .label {
+  color: var(--odin-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.odin-stat .value {
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  margin-top: 0.15rem;
+}
+
+.odin-stat .value small {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--odin-muted);
+  margin-left: 0.15rem;
+}
+
+.odin-stat .sub {
+  color: var(--odin-faint);
+  font-size: 0.72rem;
+  margin-top: 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.odin-stat svg {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 1200px) {
+  .odin-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .odin-stat:nth-child(3n) {
+    border-right: 0;
+  }
+  .odin-stat:nth-child(-n + 3) {
+    border-bottom: 1px solid var(--odin-border);
+  }
+}
+
+/* ---------- Tables ---------- */
+
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: var(--odin-surface-2);
+  --bs-table-hover-bg: var(--odin-accent-soft);
+  --bs-table-border-color: var(--odin-border);
+  margin-bottom: 0;
+  font-size: 0.8125rem;
+}
+
+.table > thead th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--odin-muted);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  border-bottom-width: 1px;
+  white-space: nowrap;
+  background: transparent;
+}
+
+.table > :not(caption) > * > * {
+  padding: 0.55rem 0.75rem;
+  vertical-align: middle;
+}
+
+.odin-table td.num,
+.odin-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.odin-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.odin-table .name {
+  font-weight: 600;
+}
+
+.odin-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--odin-muted);
+}
+
+/* ---------- Status ---------- */
+
+.odin-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--odin-faint);
+  margin-right: 0.4rem;
+  vertical-align: 1px;
+}
+
+.odin-dot.ok { background: var(--odin-ok); }
+.odin-dot.warn { background: var(--odin-warn); }
+.odin-dot.bad { background: var(--odin-bad); }
+
+.odin-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--odin-border);
+  background: var(--odin-surface-2);
+  color: var(--odin-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.odin-tag.accent { color: var(--odin-accent); background: var(--odin-accent-soft); border-color: transparent; }
+.odin-tag.ok { color: var(--odin-ok); background: var(--odin-ok-soft); border-color: transparent; }
+.odin-tag.warn { color: var(--odin-warn); background: var(--odin-warn-soft); border-color: transparent; }
+.odin-tag.bad { color: var(--odin-bad); background: var(--odin-bad-soft); border-color: transparent; }
+
+.odin-status {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.odin-status.s2 { color: var(--odin-ok); }
+.odin-status.s3 { color: var(--odin-muted); }
+.odin-status.s4 { color: var(--odin-warn); }
+.odin-status.s5 { color: var(--odin-bad); }
+
+.odin-method {
+  display: inline-block;
+  min-width: 3.4rem;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--odin-muted);
+}
+
+.odin-bars {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.odin-bar {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) 4.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+}
+
+.odin-bar .track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--odin-surface-2);
+  border: 1px solid var(--odin-border);
+  overflow: hidden;
+}
+
+.odin-bar .fill {
+  height: 100%;
+  background: var(--odin-accent);
+}
+
+.odin-bar.s4 .fill { background: var(--odin-warn); }
+.odin-bar.s5 .fill { background: var(--odin-bad); }
+.odin-bar.s3 .fill { background: var(--odin-faint); }
+.odin-bar .count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--odin-muted);
+}
+
+/* ---------- Controls ---------- */
+
+.btn {
+  --bs-btn-font-size: 0.8125rem;
+  --bs-btn-padding-y: 0.35rem;
+  --bs-btn-padding-x: 0.8rem;
+  --bs-btn-border-radius: 6px;
+  --bs-btn-font-weight: 500;
+}
+
+.btn-sm {
+  --bs-btn-font-size: 0.75rem;
+  --bs-btn-padding-y: 0.2rem;
+  --bs-btn-padding-x: 0.55rem;
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--odin-accent);
+  --bs-btn-border-color: var(--odin-accent);
+  --bs-btn-hover-bg: var(--odin-accent-hover);
+  --bs-btn-hover-border-color: var(--odin-accent-hover);
+  --bs-btn-active-bg: var(--odin-accent-hover);
+  --bs-btn-active-border-color: var(--odin-accent-hover);
+  --bs-btn-disabled-bg: var(--odin-accent);
+  --bs-btn-disabled-border-color: var(--odin-accent);
+  --bs-btn-color: #fff;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-color: #fff;
+}
+
+[data-bs-theme="dark"] .btn-primary {
+  --bs-btn-color: #0b0d10;
+  --bs-btn-hover-color: #0b0d10;
+  --bs-btn-active-color: #0b0d10;
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--odin-accent);
+  --bs-btn-border-color: var(--odin-border-strong);
+  --bs-btn-hover-bg: var(--odin-accent-soft);
+  --bs-btn-hover-color: var(--odin-accent);
+  --bs-btn-hover-border-color: var(--odin-accent);
+  --bs-btn-active-bg: var(--odin-accent-soft);
+  --bs-btn-active-color: var(--odin-accent);
+  --bs-btn-active-border-color: var(--odin-accent);
+}
+
+.btn-outline-secondary,
+.btn-light,
+.odin-btn-quiet {
+  --bs-btn-color: var(--odin-text);
+  --bs-btn-bg: var(--odin-surface);
+  --bs-btn-border-color: var(--odin-border-strong);
+  --bs-btn-hover-color: var(--odin-text);
+  --bs-btn-hover-bg: var(--odin-surface-2);
+  --bs-btn-hover-border-color: var(--odin-border-strong);
+  --bs-btn-active-bg: var(--odin-surface-2);
+  --bs-btn-active-color: var(--odin-text);
+}
+
+.btn-outline-danger {
+  --bs-btn-color: var(--odin-bad);
+  --bs-btn-border-color: var(--odin-border-strong);
+  --bs-btn-hover-bg: var(--odin-bad-soft);
+  --bs-btn-hover-color: var(--odin-bad);
+  --bs-btn-hover-border-color: var(--odin-bad);
+}
+
+.odin-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--odin-muted);
+  text-decoration: none;
+}
+
+.odin-icon-btn:hover {
+  color: var(--odin-text);
+  border-color: var(--odin-border);
+  background: var(--odin-surface-2);
+}
+
+.odin-icon-btn.danger:hover {
+  color: var(--odin-bad);
+}
+
+.form-control,
+.form-select {
+  font-size: 0.8125rem;
+  border-color: var(--odin-border-strong);
+  background-color: var(--odin-surface);
+  border-radius: 6px;
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  border-color: var(--odin-accent);
+  box-shadow: 0 0 0 3px var(--odin-accent-soft);
+}
+
+.form-check-input:checked {
+  background-color: var(--odin-accent);
+  border-color: var(--odin-accent);
+}
+
+.form-label {
+  font-weight: 500;
+  font-size: 0.8125rem;
+  margin-bottom: 0.3rem;
+}
+
+.form-text {
+  color: var(--odin-faint);
+  font-size: 0.75rem;
+}
+
+.nav-tabs {
+  --bs-nav-tabs-border-color: var(--odin-border);
+  --bs-nav-tabs-link-active-bg: var(--odin-surface);
+  --bs-nav-tabs-link-active-border-color: var(--odin-border) var(--odin-border) var(--odin-surface);
+}
+
+.nav-link {
+  color: var(--odin-muted);
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--odin-text);
+}
+
+.nav-pills .nav-link.active {
+  background: var(--odin-accent-soft);
+  color: var(--odin-accent);
+}
+
+.badge {
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+.alert {
+  border-radius: 8px;
+  font-size: 0.8125rem;
+}
+
+.modal-content {
+  border-radius: 10px;
+  border-color: var(--odin-border);
+  background: var(--odin-surface);
+}
+
+.odin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.odin-filters .form-control,
+.odin-filters .form-select {
+  width: auto;
+  min-width: 9rem;
+}
+
+.odin-copied {
+  color: var(--odin-ok) !important;
+}
+
+/* ---------- Narrow screens ---------- */
+
+@media (max-width: 860px) {
+  .odin-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .odin-sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .odin-nav-label,
+  .odin-sidebar-foot {
+    display: none;
+  }
+  .odin-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+  }
+  .odin-page {
+    padding: 1rem;
+  }
+}

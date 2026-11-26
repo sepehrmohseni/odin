@@ -16,9 +16,11 @@ func MonitoringMiddleware() echo.MiddlewareFunc {
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// The admin's own pages, API and assets are operator traffic, not gateway traffic.
+			// The admin's own pages, API and assets are operator traffic, and health probes and
+			// metric scrapes are infrastructure: neither is gateway traffic, and probes every few
+			// seconds would crowd real requests out of the request log.
 			requestPath := c.Request().URL.Path
-			if requestPath == "/admin" || strings.HasPrefix(requestPath, "/admin/") || strings.HasPrefix(requestPath, "/static/") {
+			if notTraffic(requestPath) {
 				return next(c)
 			}
 
@@ -50,4 +52,12 @@ func MonitoringMiddleware() echo.MiddlewareFunc {
 			return err
 		}
 	}
+}
+
+func notTraffic(path string) bool {
+	switch path {
+	case "/admin", "/health", "/ready", "/live", "/metrics":
+		return true
+	}
+	return strings.HasPrefix(path, "/admin/") || strings.HasPrefix(path, "/static/")
 }

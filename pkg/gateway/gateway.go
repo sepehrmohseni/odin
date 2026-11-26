@@ -743,25 +743,7 @@ func newIPExtractor(trusted []string) (echo.IPExtractor, error) {
 // serviceRateLimit resolves a service's limit: the global one when rateLimit.enabled, unless the
 // service opts out or sets its own limit/window.
 func serviceRateLimit(global config.RateLimitConfig, svc *config.ServiceRateLimitConfig) (int, time.Duration) {
-	limit, window := 0, global.Duration
-	if global.Enabled {
-		limit = global.Limit
-	}
-	if svc != nil {
-		if svc.Enabled != nil && !*svc.Enabled {
-			return 0, 0
-		}
-		if svc.Limit > 0 {
-			limit = svc.Limit
-		}
-		if svc.Window > 0 {
-			window = svc.Window
-		}
-	}
-	if window <= 0 {
-		window = time.Minute
-	}
-	return limit, window
+	return config.EffectiveRateLimit(global, svc)
 }
 
 // newRateLimiter builds the shared limiter when any service is rate limited.

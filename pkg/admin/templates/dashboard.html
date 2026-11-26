@@ -2,10 +2,272 @@
 {{template "base" .}}
 {{end}}
 
-{{define "title"}}Odin API Gateway - Dashboard{{end}}
-
-{{define "container-class"}}container-fluid{{end}}
+{{define "title"}}Dashboard - Odin Admin{{end}}
 
 {{define "content"}}
-<div id="service-list">{{template "service_list.html" .}}</div>
+<div class="odin-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p>
+      {{len .Services}} service{{if ne (len .Services) 1}}s{{end}} · up <span id="uptime">—</span>
+      {{if .ConfigPath}} · <span class="mono">{{.ConfigPath}}</span>{{end}}
+    </p>
+  </div>
+  <div class="actions">
+    {{with openapiURL}}<a class="btn odin-btn-quiet" href="{{.}}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-code"></i> API docs</a>{{end}}
+    <a class="btn btn-primary" href="/admin/services/new"><i class="bi bi-plus-lg"></i> Add service</a>
+  </div>
+</div>
+
+<section class="odin-stats" aria-label="Traffic">
+  <div class="odin-stat">
+    <div class="label">Requests / s</div>
+    <div class="value" id="stat-rate">—</div>
+    <svg id="stat-spark" aria-hidden="true"></svg>
+  </div>
+  <div class="odin-stat">
+    <div class="label">Requests</div>
+    <div class="value" id="stat-total">—</div>
+    <div class="sub">since the gateway started</div>
+  </div>
+  <div class="odin-stat">
+    <div class="label">Success</div>
+    <div class="value" id="stat-success">—</div>
+    <div class="sub">2xx and 3xx responses</div>
+  </div>
+  <div class="odin-stat">
+    <div class="label">Latency p50</div>
+    <div class="value" id="stat-p50">—</div>
+    <div class="sub" id="stat-p99">p90 — · p99 —</div>
+  </div>
+  <div class="odin-stat">
+    <div class="label">Client errors</div>
+    <div class="value" id="stat-4xx">—</div>
+    <div class="sub">4xx: auth, limits, not found</div>
+  </div>
+  <div class="odin-stat">
+    <div class="label">Server errors</div>
+    <div class="value" id="stat-5xx">—</div>
+    <div class="sub">5xx: upstream failures</div>
+  </div>
+</section>
+
+<section class="odin-panel mb-3">
+  <header>
+    <h2>Services</h2>
+    <div class="d-flex align-items-center gap-2">
+      <span class="hint d-none d-lg-inline">Traffic counts since the gateway started</span>
+      <input class="form-control form-control-sm" id="svc-filter" type="search" placeholder="Filter services" style="width: 12rem" aria-label="Filter services" />
+    </div>
+  </header>
+  {{if .Services}}
+  <div class="table-responsive">
+    <table class="table table-hover odin-table" id="svc-table">
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Route</th>
+          <th>Upstream</th>
+          <th>Policies</th>
+          <th class="num">Requests</th>
+          <th class="num">4xx</th>
+          <th class="num">5xx</th>
+          <th class="num">Avg</th>
+          <th class="text-end"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Services}}
+        <tr data-service="{{.Name}}">
+          <td>
+            <span class="name">{{.Name}}</span>
+            {{if ne .Protocol "http"}}<span class="odin-tag ms-1">{{.Protocol}}</span>{{end}}
+          </td>
+          <td>
+            <code>{{.BasePath}}</code>
+            {{if .StripBasePath}}<span class="odin-tag ms-1" title="The upstream receives the path without the base path">strip</span>{{end}}
+          </td>
+          <td class="mono" style="font-size: 0.75rem">
+            {{range .Targets}}
+            <div data-target="{{.}}"><span class="odin-dot" title="Not health checked"></span><span class="text-muted">{{.}}</span></div>
+            {{end}}
+          </td>
+          <td>
+            <div class="d-flex flex-wrap gap-1">
+              {{if .Authentication}}<span class="odin-tag accent" title="Requests need a valid JWT"><i class="bi bi-lock"></i>JWT</span>{{else}}<span class="odin-tag">public</span>{{end}}
+              {{if .RateLimit}}<span class="odin-tag" title="Requests per client">{{.RateLimit}}</span>{{end}}
+              {{if .Cache}}<span class="odin-tag" title="Response cache TTL">cache {{.Cache}}</span>{{end}}
+              {{if .Timeout}}<span class="odin-tag" title="Upstream timeout">{{.Timeout}}</span>{{end}}
+            </div>
+          </td>
+          <td class="num" data-k="requests">0</td>
+          <td class="num" data-k="clientErrors">0</td>
+          <td class="num" data-k="serverErrors">0</td>
+          <td class="num text-muted" data-k="avgMs">—</td>
+          <td class="text-end text-nowrap">
+            <button type="button" class="odin-icon-btn" title="Copy a curl command" data-copy-path="{{.BasePath}}" data-auth="{{.Authentication}}"><i class="bi bi-terminal"></i></button>
+            <a class="odin-icon-btn" href="/admin/services/{{.Name}}" title="Edit"><i class="bi bi-pencil"></i></a>
+            <button type="button" class="odin-icon-btn danger" title="Delete"
+              hx-delete="/admin/services/{{.Name}}" hx-confirm="Delete the service {{.Name}}? This edits the configuration file."
+              hx-swap="none" hx-on::after-request="odinAfterDelete(event)"><i class="bi bi-trash"></i></button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <div class="px-3 py-2 text-muted" id="svc-msg" style="font-size: 0.78rem" hidden></div>
+  {{else}}
+  <div class="odin-empty">
+    <p class="mb-2">No services yet. A service maps a path prefix to one or more upstream targets.</p>
+    <a class="btn btn-primary btn-sm" href="/admin/services/new"><i class="bi bi-plus-lg"></i> Add a service</a>
+  </div>
+  {{end}}
+</section>
+
+<div class="odin-grid two">
+  <section class="odin-panel">
+    <header>
+      <h2>Recent requests</h2>
+      <a class="hint" href="/admin/traces">Request log <i class="bi bi-arrow-right"></i></a>
+    </header>
+    <div class="table-responsive">
+      <table class="table odin-table">
+        <thead>
+          <tr><th>Time</th><th>Request</th><th>Service</th><th class="num">Status</th><th class="num">Duration</th></tr>
+        </thead>
+        <tbody id="recent">
+          <tr><td colspan="5" class="odin-empty">Waiting for traffic…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="odin-grid" style="align-content: start">
+    <section class="odin-panel">
+      <header><h2>Responses</h2><span class="hint" id="resp-total"></span></header>
+      <div class="body odin-bars" id="resp-bars"></div>
+    </section>
+    <section class="odin-panel">
+      <header><h2>Upstream health</h2><span class="hint" id="health-summary"></span></header>
+      <div class="body" id="health-list"><span class="text-muted">No service has active health checks.</span></div>
+    </section>
+  </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+  (function () {
+    var O = window.Odin;
+
+    // Copy a ready-to-run curl command for a service, from the address this page was opened at.
+    document.querySelectorAll('[data-copy-path]').forEach(function (b) {
+      var cmd = 'curl -i ' + window.location.origin + b.getAttribute('data-copy-path');
+      if (b.getAttribute('data-auth') === 'true') cmd += ' -H "Authorization: Bearer $TOKEN"';
+      b.setAttribute('data-copy', cmd);
+    });
+
+    var filter = document.getElementById('svc-filter');
+    if (filter) {
+      filter.addEventListener('input', function () {
+        var q = filter.value.trim().toLowerCase();
+        document.querySelectorAll('#svc-table tbody tr').forEach(function (tr) {
+          tr.hidden = q && tr.textContent.toLowerCase().indexOf(q) < 0;
+        });
+      });
+    }
+
+    window.odinAfterDelete = function (e) {
+      var msg = document.getElementById('svc-msg');
+      if (e.detail.successful) {
+        window.location.reload();
+        return;
+      }
+      msg.hidden = false;
+      msg.className = 'px-3 py-2 text-danger';
+      msg.textContent = 'Could not delete: ' + (e.detail.xhr.responseText || e.detail.xhr.statusText).replace(/<[^>]*>/g, '').trim();
+    };
+
+    function pct(n, total) {
+      return total ? (100 * n / total) : 0;
+    }
+
+    function render(m) {
+      document.getElementById('uptime').textContent = O.since(m.startedAt);
+      document.getElementById('stat-rate').textContent = (m.requestRate || 0).toFixed(m.requestRate >= 10 ? 0 : 1);
+      document.getElementById('stat-total').textContent = O.fmtNumber(m.totalRequests);
+      var sc = m.statusCodes || {};
+      var total = (sc.success || 0) + (sc.redirect || 0) + (sc.clientError || 0) + (sc.serverError || 0);
+      document.getElementById('stat-success').innerHTML = total ? pct((sc.success || 0) + (sc.redirect || 0), total).toFixed(1) + '<small>%</small>' : '—';
+      var rt = m.responseTime || {};
+      document.getElementById('stat-p50').textContent = total ? O.fmtMs(rt.p50) : '—';
+      document.getElementById('stat-p99').textContent = total ? 'p90 ' + O.fmtMs(rt.p90) + ' · p99 ' + O.fmtMs(rt.p99) : 'p90 — · p99 —';
+      document.getElementById('stat-4xx').textContent = O.fmtNumber(sc.clientError || 0);
+      document.getElementById('stat-5xx').textContent = O.fmtNumber(sc.serverError || 0);
+      O.sparkline(document.getElementById('stat-spark'), (m.timeline || []).map(function (p) { return p.requests; }));
+
+      // Per-service traffic.
+      var byName = {};
+      (m.traffic || []).forEach(function (t) { byName[t.name] = t; });
+      document.querySelectorAll('#svc-table tbody tr').forEach(function (tr) {
+        var t = byName[tr.getAttribute('data-service')];
+        if (!t) return;
+        tr.querySelector('[data-k=requests]').textContent = O.fmtNumber(t.requests);
+        var c4 = tr.querySelector('[data-k=clientErrors]');
+        c4.textContent = O.fmtNumber(t.clientErrors);
+        c4.style.color = t.clientErrors > 0 ? 'var(--odin-warn)' : '';
+        var c5 = tr.querySelector('[data-k=serverErrors]');
+        c5.textContent = O.fmtNumber(t.serverErrors);
+        c5.style.color = t.serverErrors > 0 ? 'var(--odin-bad)' : '';
+        tr.querySelector('[data-k=avgMs]').textContent = O.fmtMs(t.avgMs);
+      });
+
+      // Target health dots.
+      var targets = m.targets || [];
+      targets.forEach(function (tg) {
+        document.querySelectorAll('#svc-table tr[data-service="' + CSS.escape(tg.service) + '"] [data-target]').forEach(function (el) {
+          if (el.getAttribute('data-target') !== tg.url) return;
+          var dot = el.querySelector('.odin-dot');
+          dot.className = 'odin-dot ' + (tg.status === 'healthy' ? 'ok' : tg.status === 'degraded' ? 'warn' : 'bad');
+          dot.title = tg.status + ' · ' + O.fmtMs(tg.responseMs) + (tg.lastError ? ' · ' + tg.lastError : '');
+        });
+      });
+      var healthy = targets.filter(function (t) { return t.status === 'healthy'; }).length;
+      document.getElementById('health-summary').textContent = targets.length ? healthy + ' of ' + targets.length + ' healthy' : '';
+      if (targets.length) {
+        document.getElementById('health-list').innerHTML = targets.map(function (t) {
+          var cls = t.status === 'healthy' ? 'ok' : t.status === 'degraded' ? 'warn' : 'bad';
+          return '<div class="d-flex justify-content-between align-items-center gap-2 py-1">' +
+            '<span class="text-truncate"><span class="odin-dot ' + cls + '"></span><strong>' + O.escapeHTML(t.service) + '</strong> ' +
+            '<span class="text-muted mono" style="font-size:.72rem">' + O.escapeHTML(t.url) + '</span></span>' +
+            '<span class="text-muted text-nowrap" style="font-size:.75rem">' + (t.status === 'healthy' ? O.fmtMs(t.responseMs) : O.escapeHTML(t.lastError || t.status)) + '</span></div>';
+        }).join('');
+      }
+
+      // Response classes.
+      var rows = [['2xx', sc.success || 0, 's2'], ['3xx', sc.redirect || 0, 's3'], ['4xx', sc.clientError || 0, 's4'], ['5xx', sc.serverError || 0, 's5']];
+      document.getElementById('resp-total').textContent = total ? O.fmtNumber(total) + ' responses' : '';
+      document.getElementById('resp-bars').innerHTML = rows.map(function (r) {
+        return '<div class="odin-bar ' + r[2] + '"><span class="odin-status ' + r[2] + '">' + r[0] + '</span>' +
+          '<div class="track"><div class="fill" style="width:' + pct(r[1], total).toFixed(1) + '%"></div></div>' +
+          '<span class="count">' + O.fmtNumber(r[1]) + '</span></div>';
+      }).join('');
+
+      // Latest requests first.
+      var traces = (m.traces || []).slice(-12).reverse();
+      if (traces.length) {
+        document.getElementById('recent').innerHTML = traces.map(function (t) {
+          return '<tr><td class="text-muted text-nowrap">' + new Date(t.timestamp).toLocaleTimeString() + '</td>' +
+            '<td class="text-truncate" style="max-width: 22rem"><span class="odin-method">' + O.escapeHTML(t.method) + '</span><span class="mono">' + O.escapeHTML(t.path) + '</span></td>' +
+            '<td>' + O.escapeHTML(t.service) + '</td>' +
+            '<td class="num"><span class="odin-status ' + O.statusClass(t.status) + '">' + t.status + '</span></td>' +
+            '<td class="num text-muted">' + O.fmtMs(t.duration) + '</td></tr>';
+        }).join('');
+      }
+    }
+
+    O.pollMetrics(render, 4000);
+  })();
+</script>
 {{end}}

@@ -17,9 +17,9 @@ func TestAdminPagesRenderTheirOwnContent(t *testing.T) {
 	auth := map[string]string{"Authorization": basic("root", "s3cret-pass")}
 
 	pages := map[string]string{
-		"/admin/dashboard":        "<title>Odin API Gateway - Dashboard</title>",
+		"/admin/dashboard":        "<title>Dashboard - Odin Admin</title>",
 		"/admin/settings":         "<title>Gateway Settings - Odin Admin</title>",
-		"/admin/traces":           "<title>Distributed Traces - Odin Admin</title>",
+		"/admin/traces":           "<title>Request log - Odin Admin</title>",
 		"/admin/monitoring":       "<title>Real-time Monitoring - Odin Admin</title>",
 		"/admin/middleware-chain": "<title>Middleware Chain - Odin Admin</title>",
 		"/admin/services/new":     "<title>Add Service - Odin Admin</title>",
@@ -30,7 +30,7 @@ func TestAdminPagesRenderTheirOwnContent(t *testing.T) {
 		body := rec.Body.String()
 		assert.Contains(t, body, title, "%s renders its own page (every page used to show the traces page)", path)
 		if path != "/admin/traces" {
-			assert.NotContains(t, body, "Distributed Traces - Odin Admin", path)
+			assert.NotContains(t, body, "Request log - Odin Admin", path)
 		}
 	}
 

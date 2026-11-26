@@ -1,6 +1,9 @@
 package admin
 
 import (
+	"fmt"
+	"time"
+
 	"odin/pkg/config"
 
 	"github.com/labstack/echo/v4"
@@ -118,13 +121,76 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 	h.logger.Info("Admin routes registered")
 }
 
-// handleDashboard lists the configured services. (It used to render the list with no data, so
+// dashboardService is one row of the dashboard's service table: what the gateway enforces for
+// the service, in the words the page shows.
+type dashboardService struct {
+	Name, BasePath, Protocol string
+	Targets                  []string
+	Authentication           bool
+	StripBasePath            bool
+	RateLimit                string // "600 / min", empty when unlimited
+	Cache                    string // "30s", empty when not cached
+	HealthChecked            bool
+	Timeout                  string
+}
+
+// handleDashboard shows the gateway at a glance: live traffic (filled in by the page from the
+// metrics API) and the configured services. (The service list used to render without data, so
 // it always said "No services configured".)
 func (h *AdminHandler) handleDashboard(c echo.Context) error {
 	configMu.Lock()
+	cfg := *h.config
 	services := append([]config.ServiceConfig(nil), h.config.Services...)
 	configMu.Unlock()
-	return h.renderTemplate(c, "dashboard.html", map[string]interface{}{"Services": services})
+
+	rows := make([]dashboardService, 0, len(services))
+	for _, svc := range services {
+		row := dashboardService{
+			Name:           svc.Name,
+			BasePath:       svc.BasePath,
+			Protocol:       svc.Protocol,
+			Targets:        svc.Targets,
+			Authentication: svc.Authentication,
+			StripBasePath:  svc.StripBasePath,
+			HealthChecked:  svc.HealthCheck != nil && svc.HealthCheck.Enabled,
+		}
+		if row.Protocol == "" {
+			row.Protocol = "http"
+		}
+		if svc.Timeout > 0 {
+			row.Timeout = svc.Timeout.String()
+		}
+		if limit, window := config.EffectiveRateLimit(cfg.RateLimit, svc.RateLimit); limit > 0 {
+			row.RateLimit = fmt.Sprintf("%d / %s", limit, shortWindow(window))
+		}
+		if on, ttl := config.EffectiveCache(cfg.Cache, svc.Cache); on {
+			row.Cache = ttl.String()
+		}
+		rows = append(rows, row)
+	}
+	return h.renderTemplate(c, "dashboard.html", map[string]interface{}{
+		"Services":   rows,
+		"ConfigPath": h.configPath,
+	})
+}
+
+// shortWindow writes a rate-limit window as "min", "10 s" or "2 h".
+func shortWindow(d time.Duration) string {
+	switch {
+	case d == time.Minute:
+		return "min"
+	case d == time.Second:
+		return "s"
+	case d == time.Hour:
+		return "h"
+	case d%time.Hour == 0:
+		return fmt.Sprintf("%d h", d/time.Hour)
+	case d%time.Minute == 0:
+		return fmt.Sprintf("%d min", d/time.Minute)
+	case d%time.Second == 0:
+		return fmt.Sprintf("%d s", d/time.Second)
+	}
+	return d.String()
 }
 
 func (h *AdminHandler) handleMonitoring(c echo.Context) error {

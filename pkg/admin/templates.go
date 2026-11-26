@@ -8,6 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
+
+	"odin/pkg/config"
 
 	"github.com/labstack/echo/v4"
 )
@@ -112,6 +116,10 @@ func parsePage(name string) (*pageTemplate, error) {
 	}
 
 	set := template.New("").Funcs(template.FuncMap{
+		"year":       func() int { return time.Now().Year() },
+		"demo":       DemoMode,
+		"openapiURL": func() string { return currentLinks().OpenAPI },
+		"metricsURL": func() string { return currentLinks().Metrics },
 		"hasHook": func(hooks []string, hook string) bool {
 			for _, h := range hooks {
 				if h == hook {
@@ -310,3 +318,40 @@ const (
 	addServiceTemplate  = `<!-- Add Service Template would go here -->`
 	editServiceTemplate = `<!-- Edit Service Template would go here -->`
 )
+
+// DemoMode reports whether ODIN_DEMO is set to true: the admin then says, on every page and on
+// the login form, that it is a demo with admin / admin. Only the demo setups set it.
+func DemoMode() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("ODIN_DEMO")))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+// gatewayLinks are the gateway's optional endpoints the sidebar links to, from the config.
+type gatewayLinks struct {
+	OpenAPI string // the Swagger UI path, when openapi.enabled and uiEnabled
+	Metrics string // the Prometheus path, when monitoring.enabled
+}
+
+var links atomic.Value
+
+func currentLinks() gatewayLinks {
+	l, _ := links.Load().(gatewayLinks)
+	return l
+}
+
+func setLinks(cfg *config.Config) {
+	var l gatewayLinks
+	if cfg.OpenAPI.Enabled && cfg.OpenAPI.UIEnabled {
+		l.OpenAPI = cfg.OpenAPI.UIPath
+		if l.OpenAPI == "" {
+			l.OpenAPI = "/openapi"
+		}
+	}
+	if cfg.Monitoring.Enabled {
+		l.Metrics = cfg.Monitoring.Path
+		if l.Metrics == "" {
+			l.Metrics = "/metrics"
+		}
+	}
+	links.Store(l)
+}

@@ -43,10 +43,12 @@ func TestMonitoringRecordsRealTraffic(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, serve(h, "GET", "/mon-auth/x", nil, nil).Code)
 	}
 	serve(h, "GET", "/admin/login", nil, nil)
-	serve(h, "GET", "/static/css/base.css", nil, nil)
+	serve(h, "GET", "/static/css/odin.css", nil, nil)
+	serve(h, "GET", "/health", nil, nil)
+	serve(h, "GET", "/metrics", nil, nil)
 
 	m := admin.GetCollector().GetMetrics()
-	assert.Equal(t, before+5, m.TotalRequests, "admin pages and assets are not counted")
+	assert.Equal(t, before+5, m.TotalRequests, "admin pages, assets, health probes and scrapes are not counted")
 
 	open, auth := trafficOf("mon-open"), trafficOf("mon-auth")
 	assert.EqualValues(t, 3, open.Requests)

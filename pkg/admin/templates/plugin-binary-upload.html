@@ -1,234 +1,81 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upload Plugin Binary - Odin Admin</title>
-    <link rel="stylesheet" href="/static/css/admin.css">
-    <style>
-        .upload-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+{{define "plugin-binary-upload.html"}}
+{{template "base" .}}
+{{end}}
 
-        .upload-area {
-            border: 3px dashed #4CAF50;
-            border-radius: 10px;
-            padding: 60px 20px;
-            text-align: center;
-            background: #f8f9fa;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 30px;
-        }
+{{define "title"}}Upload Plugin Binary - Odin Admin{{end}}
 
-        .upload-area:hover {
-            background: #e8f5e9;
-            border-color: #2e7d32;
-        }
+{{define "head-extra"}}
+<style>
+  .plugins-container, .upload-container { max-width: none; }
+  .header-actions { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+  .header-actions h1, .upload-container h1 { font-size: 1.4rem; margin: 0; }
+  .btn-primary:not(.btn), .btn-secondary:not(.btn), .btn-icon { display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .8rem; border-radius: 6px; border: 1px solid var(--odin-border-strong); background: var(--odin-surface); color: var(--odin-text); font-size: .8125rem; font-weight: 500; text-decoration: none; cursor: pointer; }
+  .btn-primary:not(.btn) { background: var(--odin-accent); border-color: var(--odin-accent); color: #fff; }
+  .btn-icon { padding: .2rem .5rem; font-size: .75rem; }
+  .btn-delete { color: var(--odin-bad); }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--odin-border); border-radius: 8px; background: var(--odin-surface); margin-bottom: 1rem; }
+  .stat-card { padding: .85rem 1rem; border-right: 1px solid var(--odin-border); }
+  .stat-card:last-child { border-right: 0; }
+  .stat-card h3 { font-size: .75rem; font-weight: 500; color: var(--odin-muted); margin: 0; }
+  .stat-card .value { font-size: 1.45rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .search-filter { display: flex; gap: .5rem; margin-bottom: 1rem; }
+  .search-filter input, .search-filter select, .form-group input, .form-group select, .form-group textarea { font: inherit; font-size: .8125rem; padding: .4rem .6rem; border: 1px solid var(--odin-border-strong); border-radius: 6px; background: var(--odin-surface); color: var(--odin-text); }
+  .search-filter input { flex: 1; }
+  .plugin-table { background: var(--odin-surface); border: 1px solid var(--odin-border); border-radius: 8px; overflow: auto; }
+  .plugin-table table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+  .plugin-table th { font-size: .72rem; font-weight: 600; color: var(--odin-muted); text-align: left; padding: .55rem .75rem; border-bottom: 1px solid var(--odin-border); }
+  .plugin-table td { padding: .55rem .75rem; border-bottom: 1px solid var(--odin-border); }
+  .plugin-table tr:last-child td { border-bottom: 0; }
+  .status-badge { display: inline-block; padding: .05rem .4rem; border-radius: 4px; font-size: .72rem; font-weight: 500; background: var(--odin-surface-2); color: var(--odin-muted); }
+  .status-badge.enabled, .status-badge.active { background: var(--odin-ok-soft); color: var(--odin-ok); }
+  .status-badge.error, .status-badge.failed { background: var(--odin-bad-soft); color: var(--odin-bad); }
+  .action-buttons { display: flex; gap: .3rem; }
+  .empty-state { padding: 2rem 1rem; text-align: center; color: var(--odin-muted); }
+  .toggle-switch { position: relative; display: inline-block; width: 34px; height: 18px; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: var(--odin-border-strong); border-radius: 18px; cursor: pointer; transition: .15s; }
+  .slider:before { content: ""; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: .15s; }
+  .toggle-switch input:checked + .slider { background: var(--odin-accent); }
+  .toggle-switch input:checked + .slider:before { transform: translateX(16px); }
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 1050; align-items: center; justify-content: center; }
+  .modal.active, .modal.show { display: flex; }
+  .modal-content { background: var(--odin-surface); border: 1px solid var(--odin-border); border-radius: 10px; padding: 1.25rem; width: min(640px, 92vw); max-height: 85vh; overflow: auto; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .modal-actions, .form-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1rem; }
+  .close-btn { border: 0; background: none; font-size: 1.25rem; color: var(--odin-muted); cursor: pointer; }
+  .plugin-detail { margin-bottom: .5rem; }
+  .alert-error { background: var(--odin-bad-soft); color: var(--odin-bad); border: 0; }
+  .alert-success { background: var(--odin-ok-soft); color: var(--odin-ok); border: 0; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-weight: 500; font-size: .8125rem; margin-bottom: .3rem; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; }
+  .upload-container { background: var(--odin-surface); border: 1px solid var(--odin-border); border-radius: 8px; padding: 1.25rem; }
+  .upload-area { border: 1px dashed var(--odin-border-strong); border-radius: 8px; padding: 2rem 1rem; text-align: center; color: var(--odin-muted); cursor: pointer; margin-bottom: 1rem; }
+  .upload-area:hover, .upload-area.dragover { border-color: var(--odin-accent); background: var(--odin-accent-soft); }
+  .upload-area .icon { font-size: 1.5rem; }
+  .file-info { display: none; align-items: center; gap: .6rem; padding: .6rem .8rem; border: 1px solid var(--odin-border); border-radius: 6px; margin-bottom: 1rem; }
+  .file-info.active, .file-info.show { display: flex; }
+  .progress-container { display: none; margin: 1rem 0; }
+  .progress-container.active, .progress-container.show { display: block; }
+  .progress-bar { height: 6px; background: var(--odin-surface-2); border: 1px solid var(--odin-border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0; background: var(--odin-accent); transition: width .2s; }
+  #pluginForm { display: none; }
+  #pluginForm.active { display: block; }
+  .validation-rules { background: var(--odin-surface-2); border: 1px solid var(--odin-border); border-radius: 6px; padding: .75rem 1rem; font-size: .78rem; color: var(--odin-muted); margin-bottom: 1rem; }
+</style>
+{{end}}
 
-        .upload-area.dragover {
-            background: #c8e6c9;
-            border-color: #1b5e20;
-        }
-
-        .upload-area i {
-            font-size: 64px;
-            color: #4CAF50;
-            margin-bottom: 20px;
-        }
-
-        .upload-area p {
-            font-size: 18px;
-            color: #666;
-            margin: 10px 0;
-        }
-
-        .upload-area .btn {
-            margin-top: 20px;
-        }
-
-        .file-info {
-            display: none;
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-
-        .file-info.active {
-            display: block;
-        }
-
-        .file-icon {
-            font-size: 48px;
-            color: #2196F3;
-            margin-right: 15px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #333;
-        }
-
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .form-group textarea {
-            font-family: 'Courier New', monospace;
-            min-height: 150px;
-        }
-
-        .form-group small {
-            display: block;
-            margin-top: 5px;
-            color: #666;
-            font-size: 13px;
-        }
-
-        .progress-container {
-            display: none;
-            margin: 20px 0;
-        }
-
-        .progress-container.active {
-            display: block;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 30px;
-            background: #e0e0e0;
-            border-radius: 15px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #4CAF50, #8BC34A);
-            width: 0%;
-            transition: width 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background: #4CAF50;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #45a049;
-        }
-
-        .btn-secondary {
-            background: #757575;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #616161;
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-
-        .alert-success {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-        }
-
-        .alert-error {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-        }
-
-        .validation-rules {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
-            border-radius: 4px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-
-        .validation-rules h4 {
-            margin-top: 0;
-            color: #856404;
-        }
-
-        .validation-rules ul {
-            margin: 10px 0;
-            padding-left: 20px;
-        }
-
-        .validation-rules li {
-            color: #856404;
-            margin: 5px 0;
-        }
-
-        .form-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 30px;
-        }
-
-        #pluginForm {
-            display: none;
-        }
-
-        #pluginForm.active {
-            display: block;
-        }
-    </style>
-</head>
-<body>
-    {{template "header" .}}
-    {{template "nav" .}}
-
+{{define "content"}}
     <div class="upload-container">
         <h1>Upload Plugin Binary (.so)</h1>
 
         <div class="validation-rules">
-            <h4>⚠️ Plugin Requirements</h4>
+            <h4 class="h6"><i class="bi bi-info-circle"></i> Requirements</h4>
             <ul>
                 <li>File must be a compiled Go plugin (.so file)</li>
                 <li>Maximum file size: 50 MB</li>
-                <li>Must be compiled with Go version: <strong>1.25</strong></li>
-                <li>Must export a <code>New</code> function with signature: <code>func(map[string]interface{}) (Middleware, error)</code></li>
+                <li>Built with <code>go build -buildmode=plugin</code> from a checkout of the same Odin version, with the same Go release as the gateway (<code>CGO_ENABLED=1</code>)</li>
+                <li>Exports <code>func New(map[string]interface{}) (plugins.Middleware, error)</code> or <code>var Middleware</code>; it is checked without being run</li>
                 <li>Plugin will be disabled by default after upload</li>
             </ul>
         </div>
@@ -237,7 +84,7 @@
 
         <!-- Upload Area -->
         <div class="upload-area" id="dropzone">
-            <i class="icon">📦</i>
+            <i class="bi bi-upload icon"></i>
             <p>Drag and drop your .so file here</p>
             <p style="color: #999;">or</p>
             <button class="btn btn-primary" type="button" onclick="document.getElementById('fileInput').click()">
@@ -249,7 +96,7 @@
         <!-- File Info -->
         <div class="file-info" id="fileInfo">
             <div style="display: flex; align-items: center;">
-                <span class="file-icon">📄</span>
+                <i class="bi bi-file-earmark-binary file-icon"></i>
                 <div>
                     <strong id="fileName">No file selected</strong>
                     <p style="margin: 5px 0 0 0; color: #666;" id="fileSize">0 bytes</p>
@@ -324,7 +171,11 @@
         </div>
     </div>
 
-    <script>
+    
+{{end}}
+
+{{define "scripts"}}
+<script>
         let selectedFile = null;
 
         const dropzone = document.getElementById('dropzone');
@@ -495,7 +346,4 @@
             document.getElementById('pluginConfig').value = '{}';
         }
     </script>
-
-    {{template "footer" .}}
-</body>
-</html>
+{{end}}

@@ -1,99 +1,107 @@
 {{define "login.html"}}
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-bs-theme="light">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Odin API Gateway - Admin Login</title>
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-    
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/base.css" />
-    <link rel="stylesheet" href="/static/css/components.css" />
-    <link rel="stylesheet" href="/static/css/utilities.css" />
-    
-    <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
-    
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in - Odin Admin</title>
+    <script>
+      (function () {
+        var t = localStorage.getItem('odin-theme');
+        if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', t);
+      })();
+    </script>
+    <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.9/dist/css/bootstrap.min.css"
+      integrity="sha384-yEPZ7jP9S0QKiUQ0m3jjsO4ProIW7wvR9gXkI7JOGa2XVsw53Yke2bsdkBbjmmiX" crossorigin="anonymous" />
+    <link rel="stylesheet" href="/static/css/odin.css" />
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12/dist/htmx.min.js"
+      integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
     <style>
-      body {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      .odin-login {
         min-height: 100vh;
+        display: grid;
+        grid-template-rows: 1fr auto;
+      }
+      .odin-login main {
+        display: grid;
+        place-items: center;
+        padding: 2rem 1rem;
+      }
+      .odin-login-box {
+        width: 100%;
+        max-width: 360px;
+      }
+      .odin-login-mark {
         display: flex;
         align-items: center;
-        justify-content: center;
+        gap: 0.7rem;
+        margin-bottom: 1.5rem;
       }
-      .form-signin {
-        width: 100%;
-        max-width: 330px;
-        padding: 15px;
-        margin: auto;
+      .odin-login-mark img {
+        width: 42px;
+        height: 42px;
       }
-      .form-signin .card {
-        border: none;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      .odin-login-mark .name {
+        font-size: 1.15rem;
+        font-weight: 600;
+        line-height: 1.2;
       }
-      .form-signin input[type='text'] {
-        margin-bottom: -1px;
-        border-bottom-right-radius: 0;
-        border-bottom-left-radius: 0;
+      .odin-login-mark .what {
+        color: var(--odin-muted);
+        font-size: 0.8rem;
       }
-      .form-signin input[type='password'] {
-        margin-bottom: 10px;
-        border-top-left-radius: 0;
-        border-top-right-radius: 0;
+      .odin-login-box .odin-panel {
+        padding: 1.4rem 1.4rem 1.2rem;
       }
+      .odin-login-box h1 {
+        font-size: 1.05rem;
+        margin: 0 0 1rem;
+      }
+      [data-bs-theme="dark"] .mark-light { display: none; }
+      [data-bs-theme="light"] .mark-dark { display: none; }
+      #login-message .alert { margin-bottom: 0.9rem; padding: 0.5rem 0.75rem; }
     </style>
   </head>
-  <body class="text-center">
-    <main class="form-signin">
-      <div class="card">
-        <div class="card-body">
+  <body class="odin-login">
+    <main>
+      <div class="odin-login-box">
+        <div class="odin-login-mark">
+          <img class="mark-light" src="/static/img/odin-dark.svg" alt="" />
+          <img class="mark-dark" src="/static/img/odin.svg" alt="" />
+          <div>
+            <div class="name">Odin</div>
+            <div class="what">API gateway admin</div>
+          </div>
+        </div>
+        <div class="odin-panel">
+          <h1>Sign in</h1>
+          {{if .DemoHint}}
+          <div class="alert alert-warning py-2 px-3 mb-3" role="note">
+            Demo instance: sign in with <strong>admin</strong> / <strong>admin</strong>.
+          </div>
+          {{end}}
           <form hx-post="/admin/login" hx-target="#login-message">
-            <h1 class="h3 mb-3 fw-normal text-primary">Odin API Gateway</h1>
-            <h2 class="h5 mb-3 fw-normal">Admin Login</h2>
-
-            <div id="login-message"></div>
-
-            <div class="form-floating">
-              <input
-                type="text"
-                class="form-control"
-                id="username"
-                name="username"
-                placeholder="Username"
-                required
-              />
-              <label for="username">Username</label>
+            <div id="login-message" aria-live="polite"></div>
+            <div class="mb-3">
+              <label class="form-label" for="username">Username</label>
+              <input class="form-control" id="username" name="username" autocomplete="username" required autofocus{{if .DemoHint}} value="admin"{{end}} />
             </div>
-            <div class="form-floating">
-              <input
-                type="password"
-                class="form-control"
-                id="password"
-                name="password"
-                placeholder="Password"
-                required
-              />
-              <label for="password">Password</label>
+            <div class="mb-3">
+              <label class="form-label" for="password">Password</label>
+              <input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required{{if .DemoHint}} value="admin"{{end}} />
             </div>
-
-            <button class="w-100 btn btn-lg btn-primary" type="submit">
-              Sign in
-            </button>
-            <p class="mt-5 mb-3 text-muted">&copy; 2025 Odin API Gateway</p>
+            <button class="btn btn-primary w-100" type="submit">Sign in</button>
           </form>
         </div>
+        <p class="text-muted mt-3 mb-0" style="font-size: 0.75rem">
+          The password is set with <code>admin.passwordHash</code>, <code>admin.password</code> or
+          <code>ODIN_ADMIN_PASSWORD</code>; without one, Odin prints a generated password in its log.
+        </p>
       </div>
     </main>
-
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Custom JS -->
-    <script src="/static/js/ui.js"></script>
+    {{template "footer" .}}
   </body>
 </html>
 {{end}}

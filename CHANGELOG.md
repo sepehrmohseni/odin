@@ -17,6 +17,11 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   methods, JWT requirement, rate-limit and gateway error responses), never upstream addresses;
   `autoGenerate: false` serves a hand-written document instead. `openapi.autoGenerate` defaults
   to true (MNT-03).
+- A redesigned admin: a sidebar layout with light and dark themes, a dashboard of live traffic
+  and per-service routes, targets, policies and health, a monitoring page with a five-minute
+  chart, latency percentiles and target health, and a filterable request log with curl commands.
+  Bootstrap, Bootstrap Icons and htmx are pinned and checked with Subresource Integrity (Chart.js,
+  loaded unpinned, and an unused date library are gone).
 - `odin -openapi json|yaml` prints the OpenAPI document for a configuration without starting
   the gateway.
 - `admin.allowedOrigins` (and `ODIN_ADMIN_ALLOWED_ORIGINS`): further origins the admin accepts

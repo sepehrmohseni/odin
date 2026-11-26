@@ -74,7 +74,10 @@ func (h *AdminHandler) unauthorized(c echo.Context) error {
 }
 
 func (h *AdminHandler) handleLogin(c echo.Context) error {
-	return h.renderTemplate(c, "login.html", nil)
+	// The demo setups (ODIN_DEMO) say on the form that the login is admin / admin, and only
+	// when it really is.
+	hint := DemoMode() && h.username == "admin" && h.password == "admin" && h.passwordHash == ""
+	return h.renderTemplate(c, "login.html", map[string]interface{}{"DemoHint": hint})
 }
 
 func (h *AdminHandler) handleLoginPost(c echo.Context) error {

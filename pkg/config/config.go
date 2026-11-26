@@ -692,3 +692,44 @@ func validateConfig(config *Config) error {
 
 	return nil
 }
+
+// EffectiveRateLimit is the limit and window the gateway applies to svc: its own rateLimit over
+// the global one; a limit of 0 means none.
+func EffectiveRateLimit(global RateLimitConfig, svc *ServiceRateLimitConfig) (int, time.Duration) {
+	limit, window := 0, global.Duration
+	if global.Enabled {
+		limit = global.Limit
+	}
+	if svc != nil {
+		if svc.Enabled != nil && !*svc.Enabled {
+			return 0, 0
+		}
+		if svc.Limit > 0 {
+			limit = svc.Limit
+		}
+		if svc.Window > 0 {
+			window = svc.Window
+		}
+	}
+	if window <= 0 {
+		window = time.Minute
+	}
+	return limit, window
+}
+
+// EffectiveCache reports whether responses of svc are cached, and for how long.
+func EffectiveCache(global CacheConfig, svc *ServiceCacheConfig) (bool, time.Duration) {
+	if !global.Enabled {
+		return false, 0
+	}
+	ttl := global.TTL
+	if svc != nil {
+		if svc.Enabled != nil && !*svc.Enabled {
+			return false, 0
+		}
+		if svc.TTL > 0 {
+			ttl = svc.TTL
+		}
+	}
+	return true, ttl
+}

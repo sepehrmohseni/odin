@@ -87,6 +87,8 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) *AdminHan
 	password := firstNonEmpty(creds.Password, os.Getenv("ODIN_ADMIN_PASSWORD"), cfg.Admin.Password)
 	passwordHash := firstNonEmpty(creds.PasswordHash, os.Getenv("ODIN_ADMIN_PASSWORD_HASH"), cfg.Admin.PasswordHash)
 
+	setLinks(cfg)
+
 	if cfg.Admin.Enabled && password == "" && passwordHash == "" {
 		generated, err := randomPassword()
 		if err != nil {
