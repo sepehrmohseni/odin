@@ -71,6 +71,10 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   running chain (they only changed the database record) and accept only the pipeline's phases;
   the API works without MongoDB. The unimplemented "compile" endpoint and the bulk
   enable/disable endpoints, which only flipped database flags, are removed (MNT-03).
+- GraphQL proxying (COR-10): `__typename` is no longer blocked as introspection (it broke Apollo
+  clients); client headers, `Authorization` included, reach the server; the server's status,
+  headers and body come back unchanged instead of a re-encoded 200 (unreachable is 502, timeout
+  504); and `enableQueryCaching`, which did nothing, caches anonymous queries.
 - The admin's Postman page works: it called `/admin/api/integrations/postman/...` while the API
   was mounted at `/admin/integrations/postman/...`. The API moves under `/admin/api/`, like the
   admin's other JSON APIs (COR-12).

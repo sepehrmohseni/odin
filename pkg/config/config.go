@@ -560,9 +560,10 @@ type GraphQLConfig struct {
 	MaxQueryComplexity int `yaml:"maxQueryComplexity"`
 	// Allow __schema and __type queries.
 	EnableIntrospection bool `yaml:"enableIntrospection"`
-	// Not implemented yet.
+	// Cache answers to anonymous queries (no Authorization or cookies; never mutations or
+	// subscriptions; only 200s without errors that are not private or no-store), in memory.
 	EnableQueryCaching bool `yaml:"enableQueryCaching"`
-	// Not implemented yet.
+	// How long cached answers live (default 5m).
 	CacheTTL time.Duration `yaml:"cacheTTL"`
 }
 

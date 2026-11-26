@@ -145,8 +145,8 @@ the main file. For a guided introduction see [Concepts](../concepts.md).
 | `services[].graphql.maxQueryDepth` | integer | Maximum nesting depth (default 10). |
 | `services[].graphql.maxQueryComplexity` | integer | Maximum number of braces, a rough size limit (default 1000). |
 | `services[].graphql.enableIntrospection` | boolean | Allow __schema and __type queries. |
-| `services[].graphql.enableQueryCaching` | boolean | Not implemented yet. |
-| `services[].graphql.cacheTTL` | duration | Not implemented yet. |
+| `services[].graphql.enableQueryCaching` | boolean | Cache answers to anonymous queries (no Authorization or cookies; never mutations or subscriptions; only 200s without errors that are not private or no-store), in memory. |
+| `services[].graphql.cacheTTL` | duration | How long cached answers live (default 5m). |
 | `services[].grpc` | object | Settings for protocol: grpc. |
 | `services[].grpc.protoFiles` | list of string | Not used yet (gRPC transcoding is not implemented; see the roadmap). |
 | `services[].grpc.importPaths` | list of string | Not used yet. |

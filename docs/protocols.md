@@ -34,12 +34,20 @@ services:
       maxQueryDepth: 10
       maxQueryComplexity: 1000
       enableIntrospection: false
+      enableQueryCaching: true
+      cacheTTL: 5m
 ```
 
-`POST <basePath>` validates the query (depth by brace nesting, a size limit, introspection
-blocked unless enabled) and forwards it to the first target. Planned: forwarding client headers,
-passing the upstream status through, allowing `__typename` when introspection is off, and query
-caching.
+`POST <basePath>` validates the query (depth by brace nesting, a size limit, and `__schema` and
+`__type(...)` blocked unless introspection is enabled; `__typename` is always allowed) and
+forwards it to the first target with the client's headers, including `Authorization`. The
+server's status, headers and body come back unchanged, so error `extensions` reach the client;
+an unreachable server is a 502 and a timeout a 504, both with a GraphQL `errors` body.
+
+With `enableQueryCaching`, answers to anonymous queries are kept in memory for `cacheTTL`
+(`X-Cache: HIT` or `MISS`). Requests with `Authorization` or cookies, mutations and
+subscriptions always reach the server, and only `200` answers without `errors` that are not
+`private`, `no-store` or `no-cache` and set no cookie are stored.
 
 ## gRPC
 
