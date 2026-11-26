@@ -10,38 +10,42 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// RegisterMiddleware adds a middleware to the chain with priority and route targeting
+// RegisterMiddleware adds a middleware to the chain, or replaces the one with the same name,
+// with its priority (lower runs first), the routes it applies to and its phase (see Phase).
 func (pm *PluginManager) RegisterMiddleware(name string, middleware Middleware, priority int, routes []string, phase string) error {
+	normalized, err := NormalizePhase(phase)
+	if err != nil {
+		return err
+	}
+
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	// Store the middleware
 	pm.middlewares[name] = middleware
 
-	// Add to middleware chain
 	entry := MiddlewareEntry{
 		Name:       name,
 		Middleware: middleware,
 		Priority:   priority,
-		Routes:     routes,
-		Phase:      phase,
+		Routes:     append([]string(nil), routes...),
+		Phase:      string(normalized),
 	}
-
-	pm.middlewareChain.mu.Lock()
-	pm.middlewareChain.Middlewares = append(pm.middlewareChain.Middlewares, entry)
-
-	// Sort by priority
-	sort.Slice(pm.middlewareChain.Middlewares, func(i, j int) bool {
-		return pm.middlewareChain.Middlewares[i].Priority < pm.middlewareChain.Middlewares[j].Priority
+	pm.updateChain(func(chain []MiddlewareEntry) []MiddlewareEntry {
+		out := make([]MiddlewareEntry, 0, len(chain)+1)
+		for _, e := range chain {
+			if e.Name != name {
+				out = append(out, e)
+			}
+		}
+		return append(out, entry)
 	})
-	pm.middlewareChain.mu.Unlock()
 
 	pm.logger.WithFields(logrus.Fields{
 		"middleware": name,
 		"priority":   priority,
 		"routes":     routes,
-		"phase":      phase,
-	}).Info("Middleware registered successfully")
+		"phase":      normalized,
+	}).Info("Middleware registered")
 
 	return nil
 }
@@ -49,35 +53,46 @@ func (pm *PluginManager) RegisterMiddleware(name string, middleware Middleware, 
 // UnregisterMiddleware removes a middleware from the chain
 func (pm *PluginManager) UnregisterMiddleware(name string) error {
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	// Remove from middlewares map
 	middleware, exists := pm.middlewares[name]
+	if exists {
+		delete(pm.middlewares, name)
+		pm.updateChain(func(chain []MiddlewareEntry) []MiddlewareEntry {
+			out := make([]MiddlewareEntry, 0, len(chain))
+			for _, e := range chain {
+				if e.Name != name {
+					out = append(out, e)
+				}
+			}
+			return out
+		})
+	}
+	pm.mu.Unlock()
+
 	if !exists {
 		return nil // Already unregistered
 	}
-
-	// Cleanup the middleware
+	// Plugin code runs outside the manager's lock.
 	if err := middleware.Cleanup(); err != nil {
 		pm.logger.WithError(err).WithField("middleware", name).Warn("Middleware cleanup failed")
 	}
-
-	delete(pm.middlewares, name)
-
-	// Remove from middleware chain
-	pm.middlewareChain.mu.Lock()
-	filtered := make([]MiddlewareEntry, 0, len(pm.middlewareChain.Middlewares))
-	for _, entry := range pm.middlewareChain.Middlewares {
-		if entry.Name != name {
-			filtered = append(filtered, entry)
-		}
-	}
-	pm.middlewareChain.Middlewares = filtered
-	pm.middlewareChain.mu.Unlock()
-
-	pm.logger.WithField("middleware", name).Info("Middleware unregistered successfully")
-
+	pm.logger.WithField("middleware", name).Info("Middleware unregistered")
 	return nil
+}
+
+// updateChain publishes a new chain built by fn from the current one. The published slice is
+// never modified afterwards, so requests can iterate a snapshot without locking; it used to be
+// appended to and sorted in place while requests were reading it.
+func (pm *PluginManager) updateChain(fn func([]MiddlewareEntry) []MiddlewareEntry) {
+	pm.middlewareChain.mu.Lock()
+	defer pm.middlewareChain.mu.Unlock()
+	next := fn(pm.middlewareChain.Middlewares)
+	sort.SliceStable(next, func(i, j int) bool {
+		if next[i].Priority != next[j].Priority {
+			return next[i].Priority < next[j].Priority
+		}
+		return next[i].Name < next[j].Name
+	})
+	pm.middlewareChain.Middlewares = next
 }
 
 // LoadMiddlewareWithChain loads a middleware plugin and adds it to the middleware chain
@@ -109,76 +124,50 @@ func (pm *PluginManager) GetMiddlewareChain() []MiddlewareEntry {
 
 // UpdateMiddlewarePriority changes the priority of a middleware and resorts the chain
 func (pm *PluginManager) UpdateMiddlewarePriority(name string, newPriority int) error {
-	pm.middlewareChain.mu.Lock()
-	defer pm.middlewareChain.mu.Unlock()
-
-	for i := range pm.middlewareChain.Middlewares {
-		if pm.middlewareChain.Middlewares[i].Name == name {
-			pm.middlewareChain.Middlewares[i].Priority = newPriority
-
-			// Resort the chain
-			sort.Slice(pm.middlewareChain.Middlewares, func(i, j int) bool {
-				return pm.middlewareChain.Middlewares[i].Priority < pm.middlewareChain.Middlewares[j].Priority
-			})
-
-			pm.logger.WithFields(logrus.Fields{
-				"middleware": name,
-				"priority":   newPriority,
-			}).Info("Middleware priority updated")
-
-			return nil
+	found := false
+	pm.updateChain(func(chain []MiddlewareEntry) []MiddlewareEntry {
+		out := append([]MiddlewareEntry(nil), chain...)
+		for i := range out {
+			if out[i].Name == name {
+				out[i].Priority = newPriority
+				found = true
+			}
 		}
+		return out
+	})
+	if !found {
+		return fmt.Errorf("middleware %s not found in chain", name)
 	}
-
-	return fmt.Errorf("middleware %s not found in chain", name)
+	pm.logger.WithFields(logrus.Fields{"middleware": name, "priority": newPriority}).Info("Middleware priority updated")
+	return nil
 }
 
 // UpdateMiddlewareRoutes changes the routes a middleware applies to
 func (pm *PluginManager) UpdateMiddlewareRoutes(name string, routes []string) error {
-	pm.middlewareChain.mu.Lock()
-	defer pm.middlewareChain.mu.Unlock()
-
-	for i := range pm.middlewareChain.Middlewares {
-		if pm.middlewareChain.Middlewares[i].Name == name {
-			pm.middlewareChain.Middlewares[i].Routes = routes
-
-			pm.logger.WithFields(logrus.Fields{
-				"middleware": name,
-				"routes":     routes,
-			}).Info("Middleware routes updated")
-
-			return nil
+	found := false
+	pm.updateChain(func(chain []MiddlewareEntry) []MiddlewareEntry {
+		out := append([]MiddlewareEntry(nil), chain...)
+		for i := range out {
+			if out[i].Name == name {
+				out[i].Routes = append([]string(nil), routes...)
+				found = true
+			}
 		}
+		return out
+	})
+	if !found {
+		return fmt.Errorf("middleware %s not found in chain", name)
 	}
-
-	return fmt.Errorf("middleware %s not found in chain", name)
+	pm.logger.WithFields(logrus.Fields{"middleware": name, "routes": routes}).Info("Middleware routes updated")
+	return nil
 }
 
-// DynamicMiddleware creates an Echo middleware that applies plugins based on route matching
+// DynamicMiddleware runs every phase's middlewares in pipeline order. The gateway mounts the
+// phases separately (PhaseMiddleware); this remains for callers that want them all at one point.
 func (pm *PluginManager) DynamicMiddleware() echo.MiddlewareFunc {
+	pre, post, proxy := pm.PhaseMiddleware(PhasePreAuth), pm.PhaseMiddleware(PhasePostAuth), pm.PhaseMiddleware(PhasePreProxy)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			requestPath := c.Request().URL.Path
-
-			// Get all middlewares that apply to this route
-			pm.middlewareChain.mu.RLock()
-			applicableMiddlewares := make([]MiddlewareEntry, 0)
-			for _, entry := range pm.middlewareChain.Middlewares {
-				if pm.matchesRoute(requestPath, entry.Routes) {
-					applicableMiddlewares = append(applicableMiddlewares, entry)
-				}
-			}
-			pm.middlewareChain.mu.RUnlock()
-
-			// Build the middleware chain
-			handler := next
-			for i := len(applicableMiddlewares) - 1; i >= 0; i-- {
-				entry := applicableMiddlewares[i]
-				handler = entry.Middleware.Handle(handler)
-			}
-
-			return handler(c)
-		}
+		return pre(post(proxy(next)))
 	}
 }
 
@@ -199,10 +188,10 @@ func (pm *PluginManager) matchesRoute(requestPath string, routePatterns []string
 			return true
 		}
 
-		// Handle prefix match with wildcard (e.g., "/api/*")
+		// Prefix match with wildcard: "/api/*" matches /api and /api/..., not /apiary.
 		if strings.HasSuffix(pattern, "/*") {
 			prefix := strings.TrimSuffix(pattern, "/*")
-			if strings.HasPrefix(requestPath, prefix) {
+			if requestPath == prefix || strings.HasPrefix(requestPath, prefix+"/") || prefix == "" {
 				return true
 			}
 		}
@@ -215,21 +204,4 @@ func (pm *PluginManager) matchesRoute(requestPath string, routePatterns []string
 	}
 
 	return false
-}
-
-// ReloadMiddlewareChain reloads all middleware from repository
-func (pm *PluginManager) ReloadMiddlewareChain(repo *PluginRepository) error {
-	// This would be called to reload middleware from MongoDB
-	// Implementation depends on repository integration
-	pm.logger.Info("Reloading middleware chain from repository")
-
-	// Clear existing middleware chain
-	pm.middlewareChain.mu.Lock()
-	pm.middlewareChain.Middlewares = []MiddlewareEntry{}
-	pm.middlewareChain.mu.Unlock()
-
-	// Reload from repository would happen here
-	// For now, this is a placeholder for future integration
-
-	return nil
 }

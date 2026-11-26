@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -140,87 +141,13 @@ func (pu *PluginUploader) EnablePlugin(c echo.Context, pm *PluginManager) error 
 		})
 	}
 
-	// Download plugin from GridFS to a fresh temporary file
-	tempPath, err := pu.downloadPluginFromGridFS(ctx, pluginInfo.FileID)
-	if err != nil {
-		pu.logger.WithError(err).Error("Failed to download plugin from GridFS")
-		return c.JSON(500, map[string]interface{}{
-			"error": "Failed to load plugin file",
-		})
-	}
-	defer func() { _ = os.Remove(tempPath) }() // Clean up after loading
-
-	// Loading runs the plugin's code, so first make sure this is the binary that was uploaded
-	// and validated: same SHA-256 as recorded at upload, and still a valid plugin.
-	if err := verifyFileHash(tempPath, pluginInfo.FileHash); err != nil {
-		pu.logger.WithError(err).WithField("plugin", pluginInfo.Name).Error("Plugin binary does not match its upload")
-		return c.JSON(500, map[string]interface{}{
-			"error": "Plugin binary does not match the uploaded file; refusing to load it",
-		})
-	}
-	if err := NewPluginValidator().ValidatePlugin(tempPath, pluginInfo.Name); err != nil {
-		return c.JSON(400, map[string]interface{}{
-			"error": fmt.Sprintf("Plugin validation failed: %s", err.Error()),
-		})
-	}
-
-	// Load the plugin
-	p, err := plugin.Open(tempPath)
-	if err != nil {
-		pu.logger.WithError(err).WithField("path", tempPath).Error("Failed to open plugin")
-
-		// Update plugin status to error
-		_, _ = pu.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{
-			"$set": bson.M{
-				"status":        "error",
-				"error_message": err.Error(),
-				"updated_at":    time.Now(),
-			},
-		})
-
-		return c.JSON(500, map[string]interface{}{
-			"error": fmt.Sprintf("Failed to load plugin: %s", err.Error()),
-		})
-	}
-
-	// Look up the New function
-	newSymbol, err := p.Lookup("New")
-	if err != nil {
-		pu.logger.WithError(err).Error("Plugin missing 'New' function")
-		return c.JSON(400, map[string]interface{}{
-			"error": "Plugin must export a 'New' function",
-		})
-	}
-
-	// Call the New function to create middleware instance
-	newFunc, ok := newSymbol.(func(map[string]interface{}) (Middleware, error))
-	if !ok {
-		return c.JSON(400, map[string]interface{}{
-			"error": "Plugin 'New' function has incorrect signature",
-		})
-	}
-
-	middleware, err := newFunc(pluginInfo.Config)
-	if err != nil {
-		pu.logger.WithError(err).Error("Failed to initialize plugin")
-		return c.JSON(500, map[string]interface{}{
-			"error": fmt.Sprintf("Failed to initialize plugin: %s", err.Error()),
-		})
-	}
-
-	// Register with middleware chain
-	err = pm.RegisterMiddleware(
-		pluginInfo.Name,
-		middleware,
-		pluginInfo.Metadata.Priority,
-		pluginInfo.Metadata.Routes,
-		pluginInfo.Metadata.Phase,
-	)
-	if err != nil {
-		pu.logger.WithError(err).Error("Failed to register middleware")
-		return c.JSON(500, map[string]interface{}{
-			"error": fmt.Sprintf("Failed to register middleware: %s", err.Error()),
-		})
+	if err := pu.activate(ctx, &pluginInfo, pm); err != nil {
+		pu.markError(ctx, id, err)
+		status := 500
+		if errors.Is(err, errInvalidPlugin) {
+			status = 400
+		}
+		return c.JSON(status, map[string]interface{}{"error": err.Error()})
 	}
 
 	// Update plugin status
@@ -526,4 +453,78 @@ func (pu *PluginUploader) GetPluginStats(c echo.Context) error {
 		"disabled":      disabledCount,
 		"status_counts": statusCounts,
 	})
+}
+
+// errInvalidPlugin marks activation failures caused by the plugin itself (a 400 for the admin).
+var errInvalidPlugin = errors.New("invalid plugin")
+
+// activate downloads an uploaded plugin, checks it is the binary that was uploaded (SHA-256)
+// and still valid, opens it and puts its middleware on the request path. Opening runs the
+// plugin's code, so it happens only here: on an explicit enable, or at startup for plugins
+// that were enabled.
+func (pu *PluginUploader) activate(ctx context.Context, info *PluginInfo, pm *PluginManager) error {
+	if err := ValidatePluginName(info.Name); err != nil {
+		return fmt.Errorf("%w: %v", errInvalidPlugin, err)
+	}
+	tempPath, err := pu.downloadPluginFromGridFS(ctx, info.FileID)
+	if err != nil {
+		return fmt.Errorf("failed to load plugin file: %w", err)
+	}
+	defer func() { _ = os.Remove(tempPath) }()
+
+	if err := verifyFileHash(tempPath, info.FileHash); err != nil {
+		return fmt.Errorf("plugin binary does not match the uploaded file, refusing to load it: %w", err)
+	}
+	if err := NewPluginValidator().ValidatePlugin(tempPath, info.Name); err != nil {
+		return fmt.Errorf("%w: plugin validation failed: %v", errInvalidPlugin, err)
+	}
+
+	p, err := plugin.Open(tempPath)
+	if err != nil {
+		return fmt.Errorf("failed to load plugin: %w", err)
+	}
+	var middleware Middleware
+	if err := safeCall(func() error {
+		var rerr error
+		middleware, rerr = resolveMiddleware(p, info.Config)
+		return rerr
+	}); err != nil {
+		return fmt.Errorf("%w: %v", errInvalidPlugin, err)
+	}
+	if err := pm.RegisterMiddleware(info.Name, middleware, info.Metadata.Priority, info.Metadata.Routes, info.Metadata.Phase); err != nil {
+		return fmt.Errorf("%w: %v", errInvalidPlugin, err)
+	}
+	return nil
+}
+
+func (pu *PluginUploader) markError(ctx context.Context, id primitive.ObjectID, cause error) {
+	pu.logger.WithError(cause).WithField("plugin_id", id.Hex()).Error("Plugin could not be activated")
+	_, _ = pu.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
+		"status":        "error",
+		"error_message": cause.Error(),
+		"updated_at":    time.Now(),
+	}})
+}
+
+// RestoreEnabled activates the uploaded plugins that are marked enabled, at startup. (They
+// were recorded as enabled but nothing loaded them again after a restart.) A plugin that fails
+// is marked with status "error" and the others still load.
+func (pu *PluginUploader) RestoreEnabled(ctx context.Context, pm *PluginManager) (int, error) {
+	cursor, err := pu.collection.Find(ctx, bson.M{"enabled": true})
+	if err != nil {
+		return 0, err
+	}
+	var enabled []PluginInfo
+	if err := cursor.All(ctx, &enabled); err != nil {
+		return 0, err
+	}
+	loaded := 0
+	for i := range enabled {
+		if err := pu.activate(ctx, &enabled[i], pm); err != nil {
+			pu.markError(ctx, enabled[i].ID, err)
+			continue
+		}
+		loaded++
+	}
+	return loaded, nil
 }

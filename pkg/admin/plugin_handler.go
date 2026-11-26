@@ -148,7 +148,7 @@ func (h *PluginHandler) createPlugin(c echo.Context) error {
 
 	// Auto-load if enabled
 	if plugin.Enabled {
-		if err := h.manager.LoadPlugin(plugin.Name, plugin.BinaryPath, plugin.Config, plugin.Hooks); err != nil {
+		if err := h.manager.LoadRecord(&plugin); err != nil {
 			// Log but don't fail
 			c.Logger().Errorf("Failed to load plugin %s: %v", plugin.Name, err)
 		}
@@ -185,11 +185,11 @@ func (h *PluginHandler) updatePlugin(c echo.Context) error {
 
 	// Reload if currently loaded
 	if _, loaded := h.manager.GetPlugin(name); loaded {
-		if err := h.manager.UnloadPlugin(name); err != nil {
+		if err := h.manager.UnloadRecord(name); err != nil {
 			c.Logger().Warnf("Failed to unload plugin %s before reload: %v", name, err)
 		}
 		if plugin.Enabled {
-			if err := h.manager.LoadPlugin(plugin.Name, plugin.BinaryPath, plugin.Config, plugin.Hooks); err != nil {
+			if err := h.manager.LoadRecord(&plugin); err != nil {
 				c.Logger().Errorf("Failed to reload plugin %s: %v", plugin.Name, err)
 			}
 		}
@@ -204,7 +204,7 @@ func (h *PluginHandler) deletePlugin(c echo.Context) error {
 
 	// Unload if loaded
 	if _, loaded := h.manager.GetPlugin(name); loaded {
-		if err := h.manager.UnloadPlugin(name); err != nil {
+		if err := h.manager.UnloadRecord(name); err != nil {
 			c.Logger().Errorf("Failed to unload plugin %s: %v", name, err)
 		}
 	}
@@ -240,18 +240,11 @@ func (h *PluginHandler) enablePlugin(c echo.Context) error {
 	}
 
 	// Load based on plugin type
-	if plugin.PluginType == "middleware" {
-		if err := h.manager.LoadMiddleware(plugin.Name, plugin.BinaryPath, plugin.Config); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": fmt.Sprintf("Failed to load middleware: %v", err),
-			})
-		}
-	} else {
-		if err := h.manager.LoadPlugin(plugin.Name, plugin.BinaryPath, plugin.Config, plugin.Hooks); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": fmt.Sprintf("Failed to load plugin: %v", err),
-			})
-		}
+	// Middleware plugins go onto the request path (they used to be loaded and never run).
+	if err := h.manager.LoadRecord(plugin); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("Failed to load plugin: %v", err),
+		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{
@@ -278,7 +271,7 @@ func (h *PluginHandler) disablePlugin(c echo.Context) error {
 				c.Logger().Errorf("Failed to unload middleware %s: %v", name, err)
 			}
 		} else {
-			if err := h.manager.UnloadPlugin(name); err != nil {
+			if err := h.manager.UnloadRecord(name); err != nil {
 				c.Logger().Errorf("Failed to unload plugin %s: %v", name, err)
 			}
 		}
@@ -300,7 +293,7 @@ func (h *PluginHandler) loadPlugin(c echo.Context) error {
 		})
 	}
 
-	if err := h.manager.LoadPlugin(plugin.Name, plugin.BinaryPath, plugin.Config, plugin.Hooks); err != nil {
+	if err := h.manager.LoadRecord(plugin); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to load plugin: %v", err),
 		})
@@ -315,7 +308,7 @@ func (h *PluginHandler) loadPlugin(c echo.Context) error {
 func (h *PluginHandler) unloadPlugin(c echo.Context) error {
 	name := c.Param("name")
 
-	if err := h.manager.UnloadPlugin(name); err != nil {
+	if err := h.manager.UnloadRecord(name); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to unload plugin: %v", err),
 		})

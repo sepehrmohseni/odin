@@ -6,6 +6,31 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
 
 ## [Unreleased]
 
+### Added
+
+- Middleware plugins run on service routes, in three phases (`pre-auth`, `post-auth`,
+  `pre-proxy`) ordered by priority and limited to their routes; enabling or disabling one takes
+  effect on the next request. Programs embedding the gateway can register compiled-in plugins
+  with `Gateway.Plugins()` (SEC-14).
+
+### Fixed
+
+- Plugin manager: the chain and hook lists are copy-on-write, duplicate names are refused,
+  plugin code runs outside the lock and a panicking plugin fails only its request; the
+  `post-request` and `pre-response` hooks fire; an `*echo.HTTPError` from a plugin keeps its
+  status (COR-21).
+- Enabled uploaded plugins are activated again at startup.
+
+### Changed
+
+- Uploaded plugins are stored in the MongoDB collection `plugin_binaries`. Existing upload
+  documents (those with a GridFS `file_id`) are moved out of `plugins` at startup; plugin records
+  created through the API stay in `plugins`.
+- Phase names are checked: `pre-auth`, `post-auth` (the default) or `pre-proxy`. The names used
+  before (`pre-routing`, `post-routing`, `pre-route`, `post-route`, `pre-response`) are mapped to
+  these; any other name is rejected.
+- Upload validation accepts plugins that export `New` or `Middleware`.
+
 ## [0.1.0] - 2026-11-26
 
 First release: the hardening pass described in docs/AUDIT.md.

@@ -40,7 +40,6 @@ exclude_docs: |
   !/contributing.md
   examples/
   images/
-  design/
 
 hooks:
   - tools/mkdocs_hooks.py
@@ -66,6 +65,7 @@ nav:
   - Project:
       - Roadmap: roadmap.md
       - Audit: AUDIT.md
+      - "Design: plugin pipeline": design/plugin-pipeline.md
       - Changelog: changelog.md
       - Contributing: contributing.md
 

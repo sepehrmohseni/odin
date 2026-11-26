@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"plugin"
@@ -301,136 +302,156 @@ func (w *pluginWrapper) Cleanup() error {
 	return resultError(result)
 }
 
-// LoadPlugin loads a plugin from a file
+// LoadPlugin opens a hook plugin (exporting `var Plugin`), initializes it and registers it for
+// the given hooks (pre-request, post-request, pre-response, post-response). Plugin code runs
+// outside the manager's lock, so a slow Initialize does not stall requests.
 func (pm *PluginManager) LoadPlugin(name, path string, config map[string]interface{}, hooks []string) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	if err := pm.checkPathLocked(path); err != nil {
+	if err := pm.CheckPluginPath(path); err != nil {
 		return err
 	}
+	pm.mu.RLock()
+	_, exists := pm.plugins[name]
+	pm.mu.RUnlock()
+	if exists {
+		return fmt.Errorf("plugin %s is already loaded", name)
+	}
+	for _, h := range hooks {
+		switch HookType(h) {
+		case PreRequestHook, PostRequestHook, PreResponseHook, PostResponseHook:
+		default:
+			return fmt.Errorf("plugin %s: unknown hook %q", name, h)
+		}
+	}
 
-	// Load the plugin file
 	p, err := plugin.Open(path)
 	if err != nil {
 		return fmt.Errorf("failed to open plugin %s: %w", name, err)
 	}
-
-	// Look for the plugin symbol
 	sym, err := p.Lookup("Plugin")
 	if err != nil {
 		return fmt.Errorf("plugin %s does not export Plugin symbol: %w", name, err)
 	}
-
-	// Type assert to Plugin interface with reflection fallback
 	pluginInstance, ok := sym.(Plugin)
 	if !ok {
-		// Try to handle interface compatibility issues with Go plugins
-		pm.logger.WithFields(logrus.Fields{
-			"plugin":      name,
-			"symbol_type": fmt.Sprintf("%T", sym),
-		}).Debug("Direct type assertion failed, attempting interface compatibility check")
-
-		// Create a compatibility wrapper if the plugin has the right methods
-		if wrapper := pm.createPluginWrapper(sym); wrapper != nil {
+		if ptr, isPtr := sym.(*Plugin); isPtr && ptr != nil && *ptr != nil {
+			pluginInstance = *ptr
+		} else if wrapper := pm.createPluginWrapper(sym); wrapper != nil {
 			pm.logger.WithField("plugin", name).Info("Created compatibility wrapper for plugin")
 			pluginInstance = wrapper
 		} else {
 			return fmt.Errorf("plugin %s does not implement Plugin interface (got type %T)", name, sym)
 		}
 	}
-
-	// Initialize the plugin
-	if err := pluginInstance.Initialize(config); err != nil {
+	if err := safeCall(func() error { return pluginInstance.Initialize(config) }); err != nil {
 		return fmt.Errorf("failed to initialize plugin %s: %w", name, err)
 	}
+	return pm.RegisterPlugin(name, pluginInstance, hooks)
+}
 
-	// Store the plugin
-	pm.plugins[name] = pluginInstance
-
-	// Register hooks
-	for _, hookType := range hooks {
-		switch HookType(hookType) {
-		case PreRequestHook:
-			pm.hooks[PreRequestHook] = append(pm.hooks[PreRequestHook], pluginInstance)
-		case PostRequestHook:
-			pm.hooks[PostRequestHook] = append(pm.hooks[PostRequestHook], pluginInstance)
-		case PreResponseHook:
-			pm.hooks[PreResponseHook] = append(pm.hooks[PreResponseHook], pluginInstance)
-		case PostResponseHook:
-			pm.hooks[PostResponseHook] = append(pm.hooks[PostResponseHook], pluginInstance)
+// RegisterPlugin adds an initialized hook plugin, for example one compiled into a program that
+// embeds the gateway. LoadPlugin uses it after opening a shared object.
+func (pm *PluginManager) RegisterPlugin(name string, p Plugin, hooks []string) error {
+	for _, h := range hooks {
+		switch HookType(h) {
+		case PreRequestHook, PostRequestHook, PreResponseHook, PostResponseHook:
+		default:
+			return fmt.Errorf("plugin %s: unknown hook %q", name, h)
 		}
+	}
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	if _, exists := pm.plugins[name]; exists {
+		return fmt.Errorf("plugin %s is already loaded", name)
+	}
+	pm.plugins[name] = p
+	for _, h := range hooks {
+		// Copy-on-write: requests iterate the previous slice while it is replaced.
+		list := append(append([]Plugin(nil), pm.hooks[HookType(h)]...), p)
+		pm.hooks[HookType(h)] = list
 	}
 
 	pm.logger.WithFields(logrus.Fields{
 		"plugin": name,
 		"hooks":  hooks,
 	}).Info("Plugin loaded successfully")
-
 	return nil
 }
 
-// UnloadPlugin unloads a plugin
+// UnloadPlugin removes a hook plugin from every hook and calls its Cleanup. (Go cannot unload
+// the shared object itself; its code stays mapped until the process exits.)
 func (pm *PluginManager) UnloadPlugin(name string) error {
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
+	p, exists := pm.plugins[name]
+	if exists {
+		delete(pm.plugins, name)
+		for hookType, list := range pm.hooks {
+			out := make([]Plugin, 0, len(list))
+			for _, q := range list {
+				if q != p {
+					out = append(out, q)
+				}
+			}
+			pm.hooks[hookType] = out
+		}
+	}
+	pm.mu.Unlock()
 
-	plugin, exists := pm.plugins[name]
 	if !exists {
 		return fmt.Errorf("plugin %s not found", name)
 	}
-
-	// Cleanup the plugin
-	if err := plugin.Cleanup(); err != nil {
+	if err := safeCall(p.Cleanup); err != nil {
 		pm.logger.WithError(err).Warnf("Plugin %s cleanup failed", name)
 	}
-
-	// Remove from hooks
-	for hookType, pluginList := range pm.hooks {
-		for i, p := range pluginList {
-			if p == plugin {
-				pm.hooks[hookType] = append(pluginList[:i], pluginList[i+1:]...)
-				break
-			}
-		}
-	}
-
-	// Remove from plugins map
-	delete(pm.plugins, name)
-
 	pm.logger.WithField("plugin", name).Info("Plugin unloaded")
 	return nil
 }
 
-// ExecuteHook executes all plugins registered for a specific hook
+// ExecuteHook runs one hook of every plugin registered for it, in load order, stopping at the
+// first error. An *echo.HTTPError from a plugin is returned unchanged, so a plugin can reject a
+// request with its own status (it used to be wrapped and so became a 500).
 func (pm *PluginManager) ExecuteHook(hookType HookType, ctx context.Context, pluginCtx *PluginContext) error {
 	pm.mu.RLock()
 	plugins := pm.hooks[hookType]
 	pm.mu.RUnlock()
 
-	for _, plugin := range plugins {
-		var err error
-		switch hookType {
-		case PreRequestHook:
-			err = plugin.PreRequest(ctx, pluginCtx)
-		case PostRequestHook:
-			err = plugin.PostRequest(ctx, pluginCtx)
-		case PreResponseHook:
-			err = plugin.PreResponse(ctx, pluginCtx)
-		case PostResponseHook:
-			err = plugin.PostResponse(ctx, pluginCtx)
+	for _, p := range plugins {
+		err := safeCall(func() error {
+			switch hookType {
+			case PreRequestHook:
+				return p.PreRequest(ctx, pluginCtx)
+			case PostRequestHook:
+				return p.PostRequest(ctx, pluginCtx)
+			case PreResponseHook:
+				return p.PreResponse(ctx, pluginCtx)
+			case PostResponseHook:
+				return p.PostResponse(ctx, pluginCtx)
+			}
+			return nil
+		})
+		if err == nil {
+			continue
 		}
-
-		if err != nil {
-			pm.logger.WithError(err).WithFields(logrus.Fields{
-				"plugin": plugin.Name(),
-				"hook":   hookType,
-			}).Error("Plugin hook execution failed")
-			return fmt.Errorf("plugin %s hook %s failed: %w", plugin.Name(), hookType, err)
+		pm.logger.WithError(err).WithFields(logrus.Fields{
+			"plugin": p.Name(),
+			"hook":   hookType,
+		}).Error("Plugin hook execution failed")
+		var he *echo.HTTPError
+		if errors.As(err, &he) {
+			return he
 		}
+		return fmt.Errorf("plugin %s hook %s failed: %w", p.Name(), hookType, err)
 	}
-
 	return nil
+}
+
+// safeCall runs plugin code, turning a panic into an error.
+func safeCall(fn func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("plugin panicked: %v", r)
+		}
+	}()
+	return fn()
 }
 
 // ListPlugins returns a list of loaded plugin names
@@ -454,104 +475,111 @@ func (pm *PluginManager) GetPlugin(name string) (Plugin, bool) {
 	return plugin, exists
 }
 
-// PluginMiddleware creates an Echo middleware that executes plugin hooks
+// PluginMiddleware runs the hook plugins for every request:
+//
+//   - pre-request: before routing; an error stops the request (an *echo.HTTPError keeps its
+//     status);
+//   - post-request and pre-response: once the response status is known, right before the
+//     response headers are written;
+//   - post-response: after the response has been written.
+//
+// Plugins can pass data between hooks of the same request through PluginContext.Metadata.
+//
+// PluginContext carries the method, path and request headers, and once known the service
+// name, the authenticated user and the response status (Metadata["status"]). post-request and
+// pre-response used to never run.
 func (pm *PluginManager) PluginMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Create plugin context
+			ctx := c.Request().Context()
 			pluginCtx := &PluginContext{
-				RequestID: c.Response().Header().Get(echo.HeaderXRequestID),
+				RequestID: c.Request().Header.Get(echo.HeaderXRequestID),
 				Path:      c.Request().URL.Path,
 				Method:    c.Request().Method,
 				Headers:   c.Request().Header,
 				Metadata:  make(map[string]interface{}),
 			}
+			fill := func() {
+				if s, ok := c.Get("service_name").(string); ok {
+					pluginCtx.ServiceName = s
+				}
+				if u, ok := c.Get("user_id").(string); ok {
+					pluginCtx.UserID = u
+				}
+			}
 
-			// Execute pre-request hooks
-			if err := pm.ExecuteHook(PreRequestHook, c.Request().Context(), pluginCtx); err != nil {
+			if err := pm.ExecuteHook(PreRequestHook, ctx, pluginCtx); err != nil {
 				return err
 			}
 
-			// Execute the handler
+			c.Response().Before(func() {
+				fill()
+				pluginCtx.Metadata["status"] = c.Response().Status
+				for _, h := range []HookType{PostRequestHook, PreResponseHook} {
+					if err := pm.ExecuteHook(h, ctx, pluginCtx); err != nil {
+						pm.logger.WithError(err).Warnf("%s hook failed", h)
+					}
+				}
+			})
+
 			err := next(c)
 
-			// Execute post-response hooks
-			if hookErr := pm.ExecuteHook(PostResponseHook, c.Request().Context(), pluginCtx); hookErr != nil {
+			fill()
+			pluginCtx.Metadata["status"] = c.Response().Status
+			if hookErr := pm.ExecuteHook(PostResponseHook, ctx, pluginCtx); hookErr != nil {
 				pm.logger.WithError(hookErr).Error("Post-response hook failed")
 			}
-
 			return err
 		}
 	}
 }
 
-// LoadMiddleware loads a middleware plugin from a binary file
+// LoadMiddleware opens a middleware plugin (exporting New or Middleware, see resolveMiddleware)
+// and keeps it under name. RegisterMiddleware (or LoadMiddlewareWithChain) puts it on the
+// request path.
 func (pm *PluginManager) LoadMiddleware(name, binaryPath string, config map[string]interface{}) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	if err := pm.checkPathLocked(binaryPath); err != nil {
+	if err := pm.CheckPluginPath(binaryPath); err != nil {
 		return err
 	}
-
-	// Check if already loaded
-	if _, exists := pm.middlewares[name]; exists {
+	pm.mu.RLock()
+	_, exists := pm.middlewares[name]
+	pm.mu.RUnlock()
+	if exists {
 		return fmt.Errorf("middleware %s is already loaded", name)
 	}
 
-	// Load the plugin binary
 	p, err := plugin.Open(binaryPath)
 	if err != nil {
 		return fmt.Errorf("failed to open middleware plugin: %w", err)
 	}
-
-	// Look up the Middleware symbol
-	symMiddleware, err := p.Lookup("Middleware")
-	if err != nil {
-		return fmt.Errorf("middleware plugin does not export 'Middleware' symbol: %w", err)
+	var middleware Middleware
+	if err := safeCall(func() error {
+		var rerr error
+		middleware, rerr = resolveMiddleware(p, config)
+		return rerr
+	}); err != nil {
+		return err
 	}
 
-	// Try to cast to Middleware interface
-	middleware, ok := symMiddleware.(Middleware)
-	if !ok {
-		// Try with pointer
-		if mwPtr, ok := symMiddleware.(*Middleware); ok && mwPtr != nil {
-			middleware = *mwPtr
-		} else {
-			return fmt.Errorf("middleware symbol is not of type Middleware")
-		}
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	if _, exists := pm.middlewares[name]; exists {
+		return fmt.Errorf("middleware %s is already loaded", name)
 	}
-
-	// Initialize middleware
-	if err := middleware.Initialize(config); err != nil {
-		return fmt.Errorf("failed to initialize middleware: %w", err)
-	}
-
-	// Store middleware
 	pm.middlewares[name] = middleware
-
 	pm.logger.Infof("Middleware %s (v%s) loaded successfully", middleware.Name(), middleware.Version())
 	return nil
 }
 
-// UnloadMiddleware unloads a middleware plugin
+// UnloadMiddleware takes a middleware off the request path and calls its Cleanup.
 func (pm *PluginManager) UnloadMiddleware(name string) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	middleware, exists := pm.middlewares[name]
+	pm.mu.RLock()
+	_, exists := pm.middlewares[name]
+	pm.mu.RUnlock()
 	if !exists {
 		return fmt.Errorf("middleware %s is not loaded", name)
 	}
-
-	// Cleanup
-	if err := middleware.Cleanup(); err != nil {
-		pm.logger.WithError(err).Warnf("Error during middleware %s cleanup", name)
-	}
-
-	delete(pm.middlewares, name)
-	pm.logger.Infof("Middleware %s unloaded", name)
-	return nil
+	return pm.UnregisterMiddleware(name)
 }
 
 // GetMiddleware returns a middleware by name

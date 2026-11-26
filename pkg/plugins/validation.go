@@ -19,12 +19,15 @@ import (
 // plugin, which is the point where it is trusted.
 type PluginValidator struct {
 	requiredSymbols []string
+	anyOf           bool // one of requiredSymbols is enough
 }
 
-// NewPluginValidator validates middleware plugins, which export `func New`.
+// NewPluginValidator validates middleware plugins, which export `func New` or
+// `var Middleware`.
 func NewPluginValidator() *PluginValidator {
 	return &PluginValidator{
-		requiredSymbols: []string{"New"},
+		requiredSymbols: []string{"New", "Middleware"},
+		anyOf:           true,
 	}
 }
 
@@ -184,8 +187,15 @@ func (pv *PluginValidator) validateSymbols(path, mainPath string) error {
 			missing = append(missing, name)
 		}
 	}
+	if pv.anyOf && len(missing) < len(pv.requiredSymbols) {
+		return nil
+	}
 	if len(missing) > 0 {
-		return fmt.Errorf("plugin does not export %s", strings.Join(missing, ", "))
+		sep := ", "
+		if pv.anyOf {
+			sep = " or "
+		}
+		return fmt.Errorf("plugin does not export %s", strings.Join(missing, sep))
 	}
 	return nil
 }

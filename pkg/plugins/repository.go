@@ -317,3 +317,25 @@ func (r *PluginRepository) UpdatePluginRoutes(ctx context.Context, name string, 
 
 	return nil
 }
+
+// LoadRecord loads a stored plugin according to its type: a middleware plugin goes onto the
+// request path with its priority, routes (appliedTo) and phase; any other plugin is loaded
+// as a hook plugin. (Middleware records used to be loaded as hook plugins, which failed.)
+func (pm *PluginManager) LoadRecord(rec *PluginRecord) error {
+	if rec.PluginType == "middleware" {
+		routes := rec.AppliedTo
+		if len(routes) == 0 {
+			routes = []string{"/*"}
+		}
+		return pm.LoadMiddlewareWithChain(rec.Name, rec.BinaryPath, rec.Config, rec.Priority, routes, rec.Phase)
+	}
+	return pm.LoadPlugin(rec.Name, rec.BinaryPath, rec.Config, rec.Hooks)
+}
+
+// UnloadRecord unloads a stored plugin of either type.
+func (pm *PluginManager) UnloadRecord(name string) error {
+	if _, ok := pm.GetMiddleware(name); ok {
+		return pm.UnloadMiddleware(name)
+	}
+	return pm.UnloadPlugin(name)
+}

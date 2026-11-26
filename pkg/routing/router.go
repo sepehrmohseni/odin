@@ -23,6 +23,17 @@ type Router struct {
 	healthy        func(target string) bool
 	rateLimiter    func(svc *service.Config) echo.MiddlewareFunc
 	enrich         func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error)
+	phases         PluginPhases
+}
+
+// PluginPhases are the middleware-plugin stages of a service's pipeline (see plugins.Phase).
+type PluginPhases struct {
+	PreAuth, PostAuth, PreProxy echo.MiddlewareFunc
+}
+
+// SetPluginPhases mounts middleware plugins on every HTTP service route.
+func (r *Router) SetPluginPhases(p PluginPhases) {
+	r.phases = p
 }
 
 // SetEnricher adds aggregation dependency data to responses of services with an aggregation
@@ -92,10 +103,17 @@ func (r *Router) RegisterRoutes() error {
 		// Name the service for metrics and logs before anything can reject the request.
 		group.Use(ServiceLabel(svc.Name))
 
-		// Authentication runs first, so nothing below (including the cache) can answer an
-		// unauthenticated request.
+		// Pipeline: pre-auth plugins, JWT check, post-auth plugins, rate limit, cache,
+		// pre-proxy plugins, proxy. Nothing after authentication (the cache included) can
+		// answer an unauthenticated request.
+		if r.phases.PreAuth != nil {
+			group.Use(r.phases.PreAuth)
+		}
 		if svc.Authentication && r.authMiddleware != nil {
 			group.Use(r.authMiddleware)
+		}
+		if r.phases.PostAuth != nil {
+			group.Use(r.phases.PostAuth)
 		}
 		group.Use(r.routeMW...)
 		if r.rateLimiter != nil {
@@ -112,6 +130,9 @@ func (r *Router) RegisterRoutes() error {
 				TTL:       ttl,
 				KeyPrefix: svc.Name,
 			}, r.logger))
+		}
+		if r.phases.PreProxy != nil {
+			group.Use(r.phases.PreProxy)
 		}
 
 		// Register routes

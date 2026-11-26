@@ -28,6 +28,9 @@ Critical and high items that are contained enough to finish in the current harde
       defaults ([OPS-05](docs/AUDIT.md#operations), OPS-08, SEC-25)
 - [x] Helm chart that renders, matches the config schema and keeps secrets in Secrets
       ([OPS-06](docs/AUDIT.md#operations))
+- [x] Middleware plugins run on the request path in ordered phases (pre-auth, post-auth,
+      pre-proxy) with priorities and routes; plugin manager safe under concurrent changes
+      ([SEC-14](docs/AUDIT.md#security), COR-21)
 - [x] Release workflow that can publish multi-arch images and binaries
       ([OPS-07](docs/AUDIT.md#operations)) — the first tag and public image wait for the owner
 - [x] Admin pages render their own content; plugin pages render at all
@@ -46,8 +49,6 @@ first. Effort: S = hours, M = a day or two, L = a week or more.
 
 | Item | Finding | Effort | Why it waits |
 | --- | --- | --- | --- |
-| Run uploaded middleware plugins on the request path (mount the chain with ordered phases), or refuse to enable them | [SEC-14](docs/AUDIT.md#security), COR-21 | L | Defines the plugin pipeline; part of milestone M0 |
-| Fix the plugin manager: copy-on-write hook lists, duplicate loads, all four hooks, HTTP errors, one plugins schema | [COR-21](docs/AUDIT.md#correctness) | M | Changes the stored plugin documents |
 | `OAuth2Middleware`: validate tokens (introspection/OIDC) or remove it | [SEC-15](docs/AUDIT.md#security) | M | Exported API; removing it is a breaking change |
 | gRPC transcoding through server reflection and `dynamicpb` | [COR-09](docs/AUDIT.md#correctness) | L | New design; current behaviour never worked |
 | GraphQL: allow `__typename`, forward headers, keep upstream status, implement or drop query caching | [COR-10](docs/AUDIT.md#correctness) | S | Changes what clients receive |

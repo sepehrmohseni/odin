@@ -75,8 +75,15 @@ func NewPluginUploader(db *mongo.Database, logger *logrus.Logger) (*PluginUpload
 		return nil, fmt.Errorf("failed to create GridFS bucket: %w", err)
 	}
 
-	// Get plugins collection
-	collection := db.Collection("plugins")
+	// Uploaded binaries have their own collection. They used to share "plugins" with the
+	// plugin API's records (a different schema), so the startup loader tried to open uploads as
+	// path-based plugins and failed; move any old upload documents over once.
+	collection := db.Collection(uploadedPluginsCollection)
+	if moved, err := migrateUploadedPlugins(context.Background(), db); err != nil {
+		logger.WithError(err).Warn("Failed to move uploaded plugins to their own collection")
+	} else if moved > 0 {
+		logger.WithField("count", moved).Info("Moved uploaded plugins to the plugin_binaries collection")
+	}
 
 	// Create indexes
 	ctx := context.Background()
@@ -382,4 +389,38 @@ func (pu *PluginUploader) validatePluginBinary(filePath, expectedName string) er
 	// Use the comprehensive validator
 	validator := NewPluginValidator()
 	return validator.ValidatePlugin(filePath, expectedName)
+}
+
+// uploadedPluginsCollection holds the uploaded plugin binaries' metadata (files in GridFS).
+const uploadedPluginsCollection = "plugin_binaries"
+
+// migrateUploadedPlugins moves upload documents (those with a GridFS file_id) out of the shared
+// "plugins" collection. It is idempotent: copies are upserted by _id before the originals are
+// deleted, so an interrupted run can simply be repeated.
+func migrateUploadedPlugins(ctx context.Context, db *mongo.Database) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	legacy := db.Collection("plugins")
+	filter := bson.M{"file_id": bson.M{"$exists": true}}
+	cursor, err := legacy.Find(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	var docs []bson.M
+	if err := cursor.All(ctx, &docs); err != nil {
+		return 0, err
+	}
+	target := db.Collection(uploadedPluginsCollection)
+	for _, doc := range docs {
+		if _, err := target.ReplaceOne(ctx, bson.M{"_id": doc["_id"]}, doc, options.Replace().SetUpsert(true)); err != nil {
+			return 0, err
+		}
+	}
+	if len(docs) > 0 {
+		if _, err := legacy.DeleteMany(ctx, filter); err != nil {
+			return 0, err
+		}
+	}
+	return len(docs), nil
 }

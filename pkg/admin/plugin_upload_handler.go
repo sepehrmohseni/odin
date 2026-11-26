@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"odin/pkg/plugins"
 
 	"github.com/labstack/echo/v4"
@@ -73,4 +74,9 @@ func (h *PluginUploadHandler) listPage(c echo.Context) error {
 	return c.Render(200, "plugin-binaries.html", map[string]interface{}{
 		"Title": "Plugin Binaries",
 	})
+}
+
+// RestoreEnabled re-activates the uploaded plugins that were enabled before a restart.
+func (h *PluginUploadHandler) RestoreEnabled(ctx context.Context) (int, error) {
+	return h.uploader.RestoreEnabled(ctx, h.pluginManager)
 }

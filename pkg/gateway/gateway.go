@@ -280,6 +280,13 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		}
 	}
 	pluginManager.SetAllowedDirs(allowedPluginDirs...)
+	// Middleware plugins run inside each service's pipeline; enabling or disabling one takes
+	// effect on the next request.
+	router.SetPluginPhases(routing.PluginPhases{
+		PreAuth:  pluginManager.PhaseMiddleware(plugins.PhasePreAuth),
+		PostAuth: pluginManager.PhaseMiddleware(plugins.PhasePostAuth),
+		PreProxy: pluginManager.PhaseMiddleware(plugins.PhasePreProxy),
+	})
 
 	// Initialize plugin repository if MongoDB is available
 	var pluginRepo *plugins.PluginRepository
@@ -298,7 +305,7 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 			} else {
 				logger.Infof("Loading %d enabled plugins from database", len(enabledPlugins))
 				for _, plugin := range enabledPlugins {
-					if err := pluginManager.LoadPlugin(plugin.Name, plugin.BinaryPath, plugin.Config, plugin.Hooks); err != nil {
+					if err := pluginManager.LoadRecord(plugin); err != nil {
 						logger.WithError(err).Warnf("Failed to load plugin %s from database", plugin.Name)
 					} else {
 						logger.Infof("Loaded plugin %s from database", plugin.Name)
@@ -324,6 +331,13 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 			} else {
 				adminHandler.SetPluginUploadHandler(pluginUploadHandler)
 				logger.Info("Plugin binary upload system initialized")
+				restoreCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+				if n, err := pluginUploadHandler.RestoreEnabled(restoreCtx); err != nil {
+					logger.WithError(err).Warn("Failed to restore enabled plugins")
+				} else if n > 0 {
+					logger.WithField("count", n).Info("Restored enabled uploaded plugins")
+				}
+				cancel()
 			}
 		}
 	}
@@ -639,6 +653,12 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	logger.Info("Monitoring metrics broadcaster started")
 
 	return gateway, nil
+}
+
+// Plugins returns the gateway's plugin manager, to register plugins compiled into the program
+// or to inspect the middleware chain.
+func (g *Gateway) Plugins() *plugins.PluginManager {
+	return g.pluginManager
 }
 
 // Handler returns the gateway's HTTP handler, for tests or for embedding it in another server.

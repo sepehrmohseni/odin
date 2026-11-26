@@ -329,7 +329,7 @@ func TestConsulTokenIsNotForwarded(t *testing.T) {
 	assert.Empty(t, h.Get("X-Consul-Token"))
 }
 
-func gatewayNew(t *testing.T, cfg *config.Config) (*gateway.Gateway, error) {
+func gatewayNew(t testing.TB, cfg *config.Config) (*gateway.Gateway, error) {
 	t.Helper()
 	return gateway.New(cfg, t.TempDir()+"/config.yaml", quietLogger())
 }

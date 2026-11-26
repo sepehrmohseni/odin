@@ -118,7 +118,7 @@ func (h *PluginHandler) uploadPlugin(c echo.Context) error {
 
 	// Auto-load if enabled
 	if plugin.Enabled {
-		if err := h.manager.LoadPlugin(plugin.Name, plugin.BinaryPath, plugin.Config, plugin.Hooks); err != nil {
+		if err := h.manager.LoadRecord(&plugin); err != nil {
 			c.Logger().Errorf("Failed to load plugin %s: %v", plugin.Name, err)
 			// Don't fail the request, just log
 		}
@@ -248,7 +248,7 @@ require (
 
 	// Auto-load if enabled
 	if plugin.Enabled {
-		if err := h.manager.LoadPlugin(plugin.Name, plugin.BinaryPath, plugin.Config, plugin.Hooks); err != nil {
+		if err := h.manager.LoadRecord(&plugin); err != nil {
 			c.Logger().Errorf("Failed to load plugin %s: %v", plugin.Name, err)
 		}
 	}
