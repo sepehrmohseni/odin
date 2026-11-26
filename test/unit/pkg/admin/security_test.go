@@ -13,6 +13,7 @@ import (
 	"odin/pkg/admin"
 	"odin/pkg/config"
 
+	gws "github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -187,6 +188,38 @@ func TestCrossOriginWritesAreRejected(t *testing.T) {
 	assert.NotEqual(t, http.StatusForbidden, rec.Code)
 }
 
+// Behind a proxy that rewrites Host (GitHub Codespaces forwards https://<name>-8080.app.github.dev
+// to localhost:8080), the browser's Origin never equals Host; admin.allowedOrigins and
+// ODIN_ADMIN_ALLOWED_ORIGINS name the origins to accept.
+func TestAllowedOriginsBehindAHostRewritingProxy(t *testing.T) {
+	const forwarded = "https://demo-8080.app.github.dev"
+	form := url.Values{"username": {"root"}, "password": {"s3cret-pass"}}.Encode()
+
+	e, _ := newAdmin(t, baseConfig())
+	rec := do(e, http.MethodPost, "/admin/login", form, map[string]string{"Origin": forwarded})
+	assert.Equal(t, http.StatusForbidden, rec.Code, "not accepted by default")
+
+	cfg := baseConfig()
+	cfg.Admin.AllowedOrigins = []string{"HTTPS://Demo-8080.app.github.dev/", "not an origin", "ftp://x"}
+	e, _ = newAdmin(t, cfg)
+	rec = do(e, http.MethodPost, "/admin/login", form, map[string]string{"Origin": forwarded})
+	assert.Equal(t, http.StatusOK, rec.Code)
+	rec = do(e, http.MethodPost, "/admin/login", form, map[string]string{"Origin": "http://demo-8080.app.github.dev"})
+	assert.Equal(t, http.StatusForbidden, rec.Code, "the scheme is part of the origin")
+	rec = do(e, http.MethodPost, "/admin/login", form, map[string]string{"Origin": "https://evil.example"})
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	t.Setenv("ODIN_ADMIN_ALLOWED_ORIGINS", " https://a.example , "+forwarded)
+	e, _ = newAdmin(t, baseConfig())
+	rec = do(e, http.MethodPost, "/admin/login", form, map[string]string{"Origin": forwarded})
+	assert.Equal(t, http.StatusOK, rec.Code)
+	rec = do(e, http.MethodPost, "/admin/services", "name=x", map[string]string{
+		"Authorization": basic("root", "s3cret-pass"),
+		"Referer":       "https://a.example/admin/services/new",
+	})
+	assert.NotEqual(t, http.StatusForbidden, rec.Code, "the Referer is checked when Origin is absent")
+}
+
 func TestSettingsAPIRedactsSecrets(t *testing.T) {
 	e, _ := newAdmin(t, baseConfig())
 	auth := map[string]string{"Authorization": basic("root", "s3cret-pass")}
@@ -291,4 +324,39 @@ services:
 
 	rec := do(e, http.MethodDelete, "/admin/services/extra", "", auth)
 	assert.Equal(t, http.StatusConflict, rec.Code, "cannot delete a service owned by services.yaml from the admin")
+}
+
+// The monitoring WebSocket accepts the admin's own origin and admin.allowedOrigins only.
+func TestMonitoringSocketChecksTheOrigin(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Admin.AllowedOrigins = []string{"https://demo-8080.app.github.dev"}
+	e, _ := newAdmin(t, cfg)
+	srv := httptest.NewServer(e)
+	t.Cleanup(srv.Close)
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/admin/ws/monitoring"
+
+	dial := func(origin string) (int, error) {
+		h := http.Header{"Authorization": {basic("root", "s3cret-pass")}, "Origin": {origin}}
+		conn, resp, err := gws.DefaultDialer.Dial(wsURL, h)
+		if conn != nil {
+			_ = conn.Close()
+		}
+		if resp == nil {
+			return 0, err
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode, err
+	}
+
+	code, err := dial(srv.URL)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusSwitchingProtocols, code)
+
+	code, err = dial("https://demo-8080.app.github.dev")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusSwitchingProtocols, code)
+
+	code, err = dial("https://evil.example")
+	assert.Error(t, err)
+	assert.Equal(t, http.StatusForbidden, code)
 }

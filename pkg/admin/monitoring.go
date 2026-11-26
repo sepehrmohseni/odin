@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"net/url"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -84,21 +82,7 @@ func NewMonitoringCollector() *MonitoringCollector {
 	}
 }
 
-var (
-	collector *MonitoringCollector
-	upgrader  = websocket.Upgrader{
-		// Only the admin's own pages may open the monitoring socket; otherwise any site could
-		// read live traffic data with the admin's cookie (cross-site WebSocket hijacking).
-		CheckOrigin: func(r *http.Request) bool {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				return true // not a browser
-			}
-			u, err := url.Parse(origin)
-			return err == nil && strings.EqualFold(u.Host, r.Host)
-		},
-	}
-)
+var collector *MonitoringCollector
 
 func init() {
 	collector = NewMonitoringCollector()
@@ -331,8 +315,20 @@ func GetMetricsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, metrics)
 }
 
-// WebSocketMonitoring handles WebSocket connections for real-time monitoring
-func WebSocketMonitoring(c echo.Context) error {
+// webSocketMonitoring streams live metrics to the monitoring page.
+func (h *AdminHandler) webSocketMonitoring(c echo.Context) error {
+	upgrader := websocket.Upgrader{
+		// Only the admin's own pages (or admin.allowedOrigins) may open the monitoring socket;
+		// otherwise any site could read live traffic data with the admin's cookie (cross-site
+		// WebSocket hijacking).
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true // not a browser
+			}
+			return h.trustedOrigin(origin, r.Host)
+		},
+	}
 	ws, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade error: %v", err)

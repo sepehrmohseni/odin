@@ -33,7 +33,7 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 	// Monitoring routes
 	protected.GET("/monitoring", h.handleMonitoring)
 	protected.GET("/api/monitoring/metrics", GetMetricsAPI)
-	protected.GET("/ws/monitoring", WebSocketMonitoring)
+	protected.GET("/ws/monitoring", h.webSocketMonitoring)
 
 	// Traces routes
 	protected.GET("/traces", h.handleTraces)

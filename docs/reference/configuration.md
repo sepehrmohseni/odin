@@ -80,6 +80,7 @@ the main file. For a guided introduction see [Concepts](../concepts.md).
 | `admin.username` | string | Admin login name (default admin; ODIN_ADMIN_USERNAME overrides it). |
 | `admin.password` | string | Admin password in plain text. Prefer passwordHash or ODIN_ADMIN_PASSWORD; without any, a random password is logged at startup. |
 | `admin.passwordHash` | string | PasswordHash is a bcrypt hash of the admin password; when set, Password is ignored. |
+| `admin.allowedOrigins` | list of string | AllowedOrigins lists further origins (scheme://host[:port]) the admin accepts form posts and API writes from, for proxies that change the Host header (for example GitHub Codespaces port forwarding). By default only the admin's own origin is accepted. ODIN_ADMIN_ALLOWED_ORIGINS adds a comma-separated list. |
 
 ## `plugins`
 

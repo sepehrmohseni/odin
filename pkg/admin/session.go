@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -149,7 +150,8 @@ func (h *AdminHandler) checkCredentials(username, password string) bool {
 // sameOrigin rejects cross-site state-changing requests (CSRF). Browsers always send Origin on
 // cross-origin POST/PUT/PATCH/DELETE; when it is absent the Referer is checked instead, and a
 // request with neither (curl, scripts) is allowed, since it cannot come from another site's page.
-func sameOrigin(r *http.Request) bool {
+// The source must be the admin's own host or one of admin.allowedOrigins.
+func (h *AdminHandler) sameOrigin(r *http.Request) bool {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return true
@@ -161,11 +163,44 @@ func sameOrigin(r *http.Request) bool {
 	if source == "" {
 		return r.Header.Get("Origin") != "null"
 	}
+	return h.trustedOrigin(source, r.Host)
+}
+
+// trustedOrigin reports whether source (an Origin or Referer value) is the admin's own host or
+// one of admin.allowedOrigins.
+func (h *AdminHandler) trustedOrigin(source, host string) bool {
 	u, err := url.Parse(source)
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(u.Host, r.Host)
+	if strings.EqualFold(u.Host, host) {
+		return true
+	}
+	return h.allowedOrigins[strings.ToLower(u.Scheme+"://"+u.Host)]
+}
+
+// parseOrigins reads admin.allowedOrigins plus a comma-separated list from the environment into
+// a set of lower-case scheme://host[:port] values. Entries that are not such an origin are
+// logged and skipped.
+func parseOrigins(configured []string, fromEnv string, logger *logrus.Logger) map[string]bool {
+	origins := make(map[string]bool)
+	all := append([]string(nil), configured...)
+	if fromEnv != "" {
+		all = append(all, strings.Split(fromEnv, ",")...)
+	}
+	for _, o := range all {
+		o = strings.TrimSpace(o)
+		if o == "" {
+			continue
+		}
+		u, err := url.Parse(o)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") {
+			logger.WithField("origin", o).Warn("Ignoring admin allowed origin: use scheme://host[:port]")
+			continue
+		}
+		origins[strings.ToLower(u.Scheme+"://"+u.Host)] = true
+	}
+	return origins
 }
 
 // isSecureRequest reports whether the client reached us over HTTPS, directly or through a

@@ -28,6 +28,7 @@ type AdminHandler struct {
 	enabled              bool
 	sessions             *sessionStore
 	logins               *loginLimiter
+	allowedOrigins       map[string]bool // scheme://host, lower case
 	cacheStore           interface{ Clear() }
 	pluginHandler        *PluginHandler
 	middlewareAPIHandler *MiddlewareAPIHandler
@@ -110,6 +111,7 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) *AdminHan
 		enabled:              cfg.Admin.Enabled,
 		sessions:             newSessionStore(),
 		logins:               newLoginLimiter(),
+		allowedOrigins:       parseOrigins(cfg.Admin.AllowedOrigins, os.Getenv("ODIN_ADMIN_ALLOWED_ORIGINS"), logger),
 		pluginHandler:        nil, // Will be set later via SetPluginHandler
 		middlewareAPIHandler: nil, // Will be set later via SetMiddlewareAPIHandler
 		integrationHandler:   nil, // Will be set later via SetIntegrationHandler

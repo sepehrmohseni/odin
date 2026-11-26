@@ -24,7 +24,14 @@ With `admin.enabled: false` no `/admin` route exists at all.
 - After five failed logins from one IP within 15 minutes, that IP is blocked for 15 minutes.
 
 State-changing requests must come from the admin's own origin, so other sites cannot submit
-forms to it, and the monitoring WebSocket checks its origin too.
+forms to it, and the monitoring WebSocket checks its origin too. If the admin sits behind a
+proxy that changes the `Host` header, so that the browser's origin never matches it (GitHub
+Codespaces port forwarding does this), list the public origin:
+
+```yaml
+admin:
+  allowedOrigins: ["https://admin.example.com"]   # or ODIN_ADMIN_ALLOWED_ORIGINS, comma-separated
+```
 
 ## Pages
 

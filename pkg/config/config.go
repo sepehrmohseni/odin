@@ -92,6 +92,11 @@ type AdminConfig struct {
 	Password string `yaml:"password"`
 	// PasswordHash is a bcrypt hash of the admin password; when set, Password is ignored.
 	PasswordHash string `yaml:"passwordHash"`
+	// AllowedOrigins lists further origins (scheme://host[:port]) the admin accepts form posts and
+	// API writes from, for proxies that change the Host header (for example GitHub Codespaces
+	// port forwarding). By default only the admin's own origin is accepted.
+	// ODIN_ADMIN_ALLOWED_ORIGINS adds a comma-separated list.
+	AllowedOrigins []string `yaml:"allowedOrigins"`
 }
 
 type PluginsConfig struct {

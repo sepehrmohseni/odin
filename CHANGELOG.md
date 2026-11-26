@@ -17,6 +17,9 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   methods, JWT requirement, rate-limit and gateway error responses), never upstream addresses;
   `autoGenerate: false` serves a hand-written document instead. `openapi.autoGenerate` defaults
   to true (MNT-03).
+- `admin.allowedOrigins` (and `ODIN_ADMIN_ALLOWED_ORIGINS`): further origins the admin accepts
+  logins, form posts and the monitoring WebSocket from, for proxies that rewrite `Host` such as
+  GitHub Codespaces port forwarding.
 
 ### Fixed
 

@@ -19,7 +19,7 @@ import (
 // disabled while still serving the routes.
 func (h *AdminHandler) basicAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if !sameOrigin(c.Request()) {
+		if !h.sameOrigin(c.Request()) {
 			return c.JSON(http.StatusForbidden, map[string]string{"error": "cross-origin request rejected"})
 		}
 
@@ -78,7 +78,7 @@ func (h *AdminHandler) handleLogin(c echo.Context) error {
 }
 
 func (h *AdminHandler) handleLoginPost(c echo.Context) error {
-	if !sameOrigin(c.Request()) {
+	if !h.sameOrigin(c.Request()) {
 		return c.HTML(http.StatusForbidden, `<div class="alert alert-danger">Cross-origin login rejected</div>`)
 	}
 
