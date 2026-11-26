@@ -29,13 +29,16 @@ flowchart TD
   B --> C{Route}
   C -->|/health, /metrics, /admin, ...| X[Gateway endpoints]
   C -->|service basePath| D[Service label]
-  D --> E{authentication?}
+  D --> P1[pre-auth plugins]
+  P1 --> E{authentication?}
   E -->|invalid or missing JWT| R401[401 / 503]
-  E -->|ok or not required| F{Rate limit}
+  E -->|ok or not required| P2[post-auth plugins]
+  P2 --> F{Rate limit}
   F -->|over limit| R429[429 + Retry-After]
   F --> G{Cache}
   G -->|fresh entry| HIT[Cached response]
-  G --> H[Proxy]
+  G --> P3[pre-proxy plugins]
+  P3 --> H[Proxy]
   H --> I[Pick target: canary rules,<br/>health, circuit breaker, balancing]
   I --> J[Upstream]
   J -->|error or 502/503/504,<br/>idempotent request| I
@@ -43,7 +46,8 @@ flowchart TD
 ```
 
 The order is fixed and deliberate: nothing, not even the cache, can answer a request for an
-authenticated service before its token has been checked. Global steps (panic recovery, body
+authenticated service before its token has been checked. Middleware [plugins](plugins.md) run at the three
+plugin steps, on service routes only. Global steps (panic recovery, body
 limit, tracing and metrics) wrap every request, including the gateway's own endpoints.
 
 ### Error responses
