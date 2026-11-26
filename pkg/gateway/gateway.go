@@ -159,6 +159,20 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 			svc.CacheTTL = svcConfig.Cache.TTL
 		}
 		svc.RateLimit, svc.RateLimitWindow = serviceRateLimit(cfg.RateLimit, svcConfig.RateLimit)
+		if cc := svcConfig.Canary; cc != nil {
+			svc.Canary = &service.CanaryConfig{
+				Enabled:     cc.Enabled,
+				Targets:     cc.Targets,
+				Weight:      cc.Weight,
+				Header:      cc.Header,
+				HeaderValue: cc.HeaderValue,
+				CookieName:  cc.CookieName,
+				CookieValue: cc.CookieValue,
+			}
+		}
+		if tc := svcConfig.Transformation; tc != nil {
+			svc.Transformation = &service.TransformationConfig{Request: tc.Request, Response: tc.Response}
+		}
 		if cb := svcConfig.CircuitBreaker; cb != nil && cb.Enabled {
 			svc.CircuitBreaker = circuitSettings(cb)
 		}
@@ -220,6 +234,9 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	}
 
 	router := routing.NewRouter(e, registry, logger)
+	router.SetEnricher(func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error) {
+		return agg.EnrichResponse(ctx, serviceName, body, nil, authorization)
+	})
 
 	adminHandler := admin.New(cfg, configPath, logger)
 

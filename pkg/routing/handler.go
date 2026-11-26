@@ -20,6 +20,7 @@ import (
 	"odin/pkg/service"
 	"odin/pkg/tracing"
 	"odin/pkg/transform"
+	"odin/pkg/websocket"
 
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
@@ -36,6 +37,9 @@ type HandlerOptions struct {
 	Healthy func(target string) bool
 	// Transport overrides the upstream transport (tests).
 	Transport http.RoundTripper
+	// Enrich adds aggregation dependency data to a JSON response body (services with an
+	// aggregation section). Nil disables enrichment.
+	Enrich func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error)
 }
 
 // ServiceHandler forwards requests for one HTTP service to its targets.
@@ -49,6 +53,8 @@ type ServiceHandler struct {
 	transformEngine *transform.Engine
 	healthy         func(string) bool
 	breakers        map[string]*circuit.CircuitBreaker // per target, when configured
+	enrich          func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error)
+	wsProxy         *websocket.Proxy
 }
 
 // errUpstream5xx marks a 5xx response as a failure for the circuit breaker.
@@ -107,6 +113,8 @@ func NewServiceHandler(svc *service.Config, logger *logrus.Logger, opts HandlerO
 		transformEngine: transform.NewEngine(logger),
 		healthy:         healthy,
 		breakers:        breakers,
+		enrich:          opts.Enrich,
+		wsProxy:         websocket.NewProxy(websocket.Config{}, logger),
 	}, nil
 }
 
@@ -136,6 +144,10 @@ func newUpstreamTransport(timeout time.Duration) *http.Transport {
 // Handle proxies one request.
 func (h *ServiceHandler) Handle(c echo.Context) error {
 	req := c.Request()
+	if websocket.IsUpgradeRequest(req) {
+		return h.proxyWebSocket(c)
+	}
+
 	ctx := req.Context()
 	bufferResponse := h.rewritesResponse()
 	retries := h.retriesFor(req)
@@ -149,6 +161,11 @@ func (h *ServiceHandler) Handle(c echo.Context) error {
 		var err error
 		if body, err = io.ReadAll(req.Body); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Failed to read request body")
+		}
+	}
+	if rules := legacyRules(h.service.Transform.Request); len(rules) > 0 {
+		if mapped, ok := transform.ApplyMappings(body, rules); ok {
+			body = mapped
 		}
 	}
 
@@ -206,15 +223,44 @@ func (h *ServiceHandler) Handle(c echo.Context) error {
 	return h.writeStreamed(c, resp)
 }
 
-// rewritesResponse reports whether responses must be buffered to be rewritten.
+// rewritesResponse reports whether responses must be buffered to be rewritten: template
+// transformations, field-mapping rules or aggregation enrichment.
 func (h *ServiceHandler) rewritesResponse() bool {
-	t := h.service.Transformation
-	return t != nil && t.Response != nil && (t.Response.Body != "" || len(t.Response.Headers) > 0)
+	if t := h.service.Transformation; t != nil && t.Response != nil && (t.Response.Body != "" || len(t.Response.Headers) > 0) {
+		return true
+	}
+	if len(h.service.Transform.Response) > 0 {
+		return true
+	}
+	return h.enrich != nil && h.service.Aggregation != nil && len(h.service.Aggregation.Dependencies) > 0
 }
 
 func (h *ServiceHandler) rewritesRequestBody() bool {
-	t := h.service.Transformation
-	return t != nil && t.Request != nil && t.Request.Body != ""
+	if t := h.service.Transformation; t != nil && t.Request != nil && t.Request.Body != "" {
+		return true
+	}
+	return len(h.service.Transform.Request) > 0
+}
+
+func legacyRules(rules []service.TransformRule) []transform.MappingRule {
+	out := make([]transform.MappingRule, 0, len(rules))
+	for _, r := range rules {
+		out = append(out, transform.MappingRule{From: r.From, To: r.To, Default: r.Default})
+	}
+	return out
+}
+
+// proxyWebSocket relays a WebSocket connection to a target of the service.
+func (h *ServiceHandler) proxyWebSocket(c echo.Context) error {
+	req := c.Request()
+	target := h.selectTarget(req, map[string]bool{})
+	u, err := h.upstreamURL(req, target)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadGateway, "Invalid upstream URL")
+	}
+	extra := http.Header{}
+	h.setForwardingHeaders(c, req.Header, extra)
+	return h.wsProxy.Proxy(c, u.String(), extra)
 }
 
 // retriesFor returns how many times a request may be retried. Only requests that are safe to
@@ -438,27 +484,7 @@ func (h *ServiceHandler) buildRequest(c echo.Context, target string, body []byte
 		out.Header.Del("Accept-Encoding")
 	}
 
-	// Forwarding headers. X-Forwarded-For is only extended when the request came through a
-	// trusted proxy (the echo IP extractor already decided that); otherwise a client could
-	// prepend addresses of its choosing.
-	clientIP := c.RealIP()
-	remoteIP := in.RemoteAddr
-	if host, _, err := net.SplitHostPort(remoteIP); err == nil {
-		remoteIP = host
-	}
-	if prior := in.Header.Get("X-Forwarded-For"); prior != "" && clientIP != remoteIP {
-		out.Header.Set("X-Forwarded-For", prior+", "+remoteIP)
-	} else {
-		out.Header.Set("X-Forwarded-For", clientIP)
-	}
-	out.Header.Set("X-Real-IP", clientIP)
-	out.Header.Set("X-Forwarded-Proto", c.Scheme())
-	out.Header.Set("X-Forwarded-Host", in.Host)
-
-	// Static headers from the service config (these were configured but never sent).
-	for k, v := range h.service.Headers {
-		out.Header.Set(k, v)
-	}
+	h.setForwardingHeaders(c, in.Header, out.Header)
 
 	// Join the caller's trace.
 	tracing.InjectHTTP(ctx, out.Header)
@@ -472,6 +498,31 @@ func (h *ServiceHandler) buildRequest(c echo.Context, target string, body []byte
 		}
 	}
 	return out, nil
+}
+
+// setForwardingHeaders sets X-Forwarded-*, X-Real-IP and the service's static headers on out.
+// X-Forwarded-For is only extended when the request came through a trusted proxy (the echo IP
+// extractor already decided that); otherwise a client could prepend addresses of its choosing.
+func (h *ServiceHandler) setForwardingHeaders(c echo.Context, in, out http.Header) {
+	req := c.Request()
+	clientIP := c.RealIP()
+	remoteIP := req.RemoteAddr
+	if host, _, err := net.SplitHostPort(remoteIP); err == nil {
+		remoteIP = host
+	}
+	if prior := in.Get("X-Forwarded-For"); prior != "" && clientIP != remoteIP {
+		out.Set("X-Forwarded-For", prior+", "+remoteIP)
+	} else {
+		out.Set("X-Forwarded-For", clientIP)
+	}
+	out.Set("X-Real-IP", clientIP)
+	out.Set("X-Forwarded-Proto", c.Scheme())
+	out.Set("X-Forwarded-Host", req.Host)
+
+	// Static headers from the service config (these were configured but never sent).
+	for k, v := range h.service.Headers {
+		out.Set(k, v)
+	}
 }
 
 func copyResponseHeaders(dst, src http.Header) {
@@ -521,6 +572,20 @@ func (h *ServiceHandler) writeTransformed(c echo.Context, resp *http.Response) e
 	}
 
 	headers := resp.Header
+	success := resp.StatusCode >= 200 && resp.StatusCode < 300
+	if rules := legacyRules(h.service.Transform.Response); len(rules) > 0 && success {
+		if mapped, ok := transform.ApplyMappings(data, rules); ok {
+			data = mapped
+		}
+	}
+	if h.enrich != nil && h.service.Aggregation != nil && success {
+		enriched, err := h.enrich(c.Request().Context(), h.service.Name, data, c.Request().Header.Get("Authorization"))
+		if err != nil {
+			h.logger.WithError(err).WithField("service", h.service.Name).Warn("Failed to enrich response")
+		} else {
+			data = enriched
+		}
+	}
 	if t := h.service.Transformation; t != nil && t.Response != nil {
 		newBody, newHeaders, err := h.transformEngine.TransformResponse(data, resp.StatusCode, resp.Header, t.Response)
 		if err != nil {

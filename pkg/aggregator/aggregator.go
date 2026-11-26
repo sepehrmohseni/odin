@@ -268,13 +268,24 @@ func (a *Aggregator) EnrichResponse(ctx context.Context, serviceName string, res
 			continue
 		}
 
-		// Apply result mappings
+		// Apply result mappings: the value at `from` in the dependency's response (all of it
+		// for "$") goes to `to` in ours. (They used to be applied twice, nesting the data at
+		// e.g. preferences.preferences.)
 		if len(dep.ResultMapping) > 0 {
 			for _, mapping := range dep.ResultMapping {
-				toPath := strings.TrimPrefix(mapping.To, "$.")
-				if toPath != "" {
-					setNestedValue(enrichedResponse, strings.Split(toPath, "."), depData)
+				value, found := depData, true
+				if from := strings.TrimPrefix(strings.TrimPrefix(mapping.From, "$"), "."); from != "" {
+					m, ok := depData.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					value, found = getNestedValue(m, strings.Split(from, "."))
 				}
+				toPath := strings.TrimPrefix(strings.TrimPrefix(mapping.To, "$"), ".")
+				if !found || toPath == "" {
+					continue
+				}
+				setNestedValue(enrichedResponse, strings.Split(toPath, "."), value)
 			}
 		} else {
 			// If no mapping specified, use service name as key
@@ -344,49 +355,5 @@ func (a *Aggregator) fetchDependencyDataForEnrichment(ctx context.Context, dep c
 		return nil, err
 	}
 
-	return a.mapResponseData(data, dep.ResultMapping), nil
-}
-
-func (a *Aggregator) mapResponseData(data interface{}, mappings []config.MappingConfig) interface{} {
-	if len(mappings) == 0 {
-		return data
-	}
-
-	// Convert data to map for processing
-	dataMap, ok := data.(map[string]interface{})
-	if !ok {
-		return data
-	}
-
-	result := make(map[string]interface{})
-
-	// Apply mappings
-	for _, mapping := range mappings {
-		fromPath := strings.TrimPrefix(mapping.From, "$.")
-		toPath := strings.TrimPrefix(mapping.To, "$.")
-
-		// Extract value from source
-		if fromPath == "" || fromPath == "$" {
-			// Map entire object
-			if toPath == "" || toPath == "$" {
-				return dataMap
-			}
-			setNestedValue(result, strings.Split(toPath, "."), dataMap)
-		} else {
-			// Extract specific field
-			value, found := getNestedValue(dataMap, strings.Split(fromPath, "."))
-			if found {
-				if toPath == "" || toPath == "$" {
-					return value
-				}
-				setNestedValue(result, strings.Split(toPath, "."), value)
-			}
-		}
-	}
-
-	if len(result) == 0 {
-		return dataMap
-	}
-
-	return result
+	return data, nil
 }

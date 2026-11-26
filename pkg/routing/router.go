@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"context"
 	"time"
 
 	"odin/pkg/cache"
@@ -21,6 +22,13 @@ type Router struct {
 	routeMW        []echo.MiddlewareFunc
 	healthy        func(target string) bool
 	rateLimiter    func(svc *service.Config) echo.MiddlewareFunc
+	enrich         func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error)
+}
+
+// SetEnricher adds aggregation dependency data to responses of services with an aggregation
+// section.
+func (r *Router) SetEnricher(fn func(ctx context.Context, serviceName string, body []byte, authorization string) ([]byte, error)) {
+	r.enrich = fn
 }
 
 // SetRateLimiter supplies the rate-limit middleware for a service (nil for none).
@@ -73,7 +81,7 @@ func (r *Router) RegisterRoutes() error {
 		}).Info("Registering HTTP service route")
 
 		// Create service handler
-		handler, err := NewServiceHandler(svc, r.logger, HandlerOptions{Healthy: r.healthy})
+		handler, err := NewServiceHandler(svc, r.logger, HandlerOptions{Healthy: r.healthy, Enrich: r.enrich})
 		if err != nil {
 			return err
 		}

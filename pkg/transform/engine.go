@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"text/template"
 	"unicode"
 
@@ -16,7 +17,8 @@ import (
 
 // Engine handles request and response transformations using Go templates
 type Engine struct {
-	logger *logrus.Logger
+	logger    *logrus.Logger
+	templates sync.Map // template text -> *template.Template, parsed once
 }
 
 // NewEngine creates a new transformation engine
@@ -187,10 +189,15 @@ func (e *Engine) applyBodyTemplate(body []byte, statusCode int, tmplStr string) 
 
 // executeTemplate executes a Go template with the given data
 func (e *Engine) executeTemplate(tmplStr string, data interface{}) (string, error) {
-	// Create template with helper functions
-	tmpl, err := template.New("transform").Funcs(templateFuncs()).Parse(tmplStr)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
+	// Templates come from the config, so parse each one once rather than on every request.
+	tmpl, _ := e.cachedTemplate(tmplStr)
+	if tmpl == nil {
+		parsed, err := template.New("transform").Funcs(templateFuncs()).Parse(tmplStr)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse template: %w", err)
+		}
+		e.templates.Store(tmplStr, parsed)
+		tmpl = parsed
 	}
 
 	var buf bytes.Buffer
@@ -241,4 +248,13 @@ func titleCase(s string) string {
 		words[i] = string(r)
 	}
 	return strings.Join(words, " ")
+}
+
+func (e *Engine) cachedTemplate(text string) (*template.Template, bool) {
+	cached, ok := e.templates.Load(text)
+	if !ok {
+		return nil, false
+	}
+	tmpl, ok := cached.(*template.Template)
+	return tmpl, ok
 }

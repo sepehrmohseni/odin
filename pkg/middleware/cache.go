@@ -112,6 +112,9 @@ func requestIsCacheable(req *http.Request) bool {
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		return false
 	}
+	if req.Header.Get("Upgrade") != "" { // WebSocket handshakes need the raw connection
+		return false
+	}
 	if req.Header.Get("Authorization") != "" || req.Header.Get("Cookie") != "" {
 		return false
 	}

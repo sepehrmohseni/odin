@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"odin/pkg/transform"
+
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -302,11 +304,34 @@ type ServiceConfig struct {
 	Cache          *ServiceCacheConfig     `yaml:"cache,omitempty"`
 	RateLimit      *ServiceRateLimitConfig `yaml:"rateLimit,omitempty"`
 	CircuitBreaker *CircuitBreakerConfig   `yaml:"circuitBreaker,omitempty"`
+	// Canary sends part of the traffic to other targets; see docs/canary-deployments.md.
+	Canary *CanaryConfig `yaml:"canary,omitempty"`
+	// Transformation rewrites requests and responses with Go templates; see
+	// docs/transformations.md. (transform: holds the older field-mapping rules.)
+	Transformation *TransformationConfig `yaml:"transformation,omitempty"`
 
 	// Source is the file a service was loaded from when it is not the main config file (for
 	// example services.yaml). It is not part of the YAML; the admin uses it to avoid writing
 	// those services into config.yaml.
 	Source string `yaml:"-" json:"-"`
+}
+
+// CanaryConfig routes a share of requests to canary targets: those with Header: HeaderValue or
+// cookie CookieName=CookieValue always, and Weight percent of the rest (sticky per client IP).
+type CanaryConfig struct {
+	Enabled     bool     `yaml:"enabled"`
+	Targets     []string `yaml:"targets"`
+	Weight      int      `yaml:"weight"`
+	Header      string   `yaml:"header,omitempty"`
+	HeaderValue string   `yaml:"headerValue,omitempty"`
+	CookieName  string   `yaml:"cookieName,omitempty"`
+	CookieValue string   `yaml:"cookieValue,omitempty"`
+}
+
+// TransformationConfig holds the template-based request and response transformations.
+type TransformationConfig struct {
+	Request  *transform.RequestTransform  `yaml:"request,omitempty"`
+	Response *transform.ResponseTransform `yaml:"response,omitempty"`
 }
 
 // ServiceRateLimitConfig sets a service's own rate limit. When rateLimit.enabled is true every

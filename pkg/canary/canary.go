@@ -39,8 +39,12 @@ func (r *Router) ShouldUseCanary(req *http.Request, config *service.CanaryConfig
 		}
 	}
 
-	// Weight-based routing (sticky by IP for consistent routing)
-	if config.Weight > 0 && config.Weight < 100 {
+	// Weight-based routing (sticky by IP for consistent routing). 100 sends everything to the
+	// canary (it used to send nothing).
+	if config.Weight >= 100 {
+		return true
+	}
+	if config.Weight > 0 {
 		return r.shouldRouteByWeight(req, config.Weight)
 	}
 

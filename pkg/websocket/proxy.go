@@ -1,9 +1,11 @@
 package websocket
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,9 +18,9 @@ type Config struct {
 	ReadBufferSize    int           `yaml:"readBufferSize"`
 	WriteBufferSize   int           `yaml:"writeBufferSize"`
 	HandshakeTimeout  time.Duration `yaml:"handshakeTimeout"`
-	ReadTimeout       time.Duration `yaml:"readTimeout"`
+	ReadTimeout       time.Duration `yaml:"readTimeout"` // idle time allowed between messages or pongs
 	WriteTimeout      time.Duration `yaml:"writeTimeout"`
-	PingPeriod        time.Duration `yaml:"pingPeriod"`
+	PingPeriod        time.Duration `yaml:"pingPeriod"` // keep-alive pings to both sides
 	MaxMessageSize    int64         `yaml:"maxMessageSize"`
 	EnableCompression bool          `yaml:"enableCompression"`
 }
@@ -54,8 +56,8 @@ func NewProxy(config Config, logger *logrus.Logger) *Proxy {
 	if config.WriteTimeout == 0 {
 		config.WriteTimeout = 10 * time.Second
 	}
-	if config.PingPeriod == 0 {
-		config.PingPeriod = 54 * time.Second
+	if config.PingPeriod == 0 || config.PingPeriod >= config.ReadTimeout {
+		config.PingPeriod = config.ReadTimeout * 9 / 10
 	}
 	if config.MaxMessageSize == 0 {
 		config.MaxMessageSize = 512 * 1024
@@ -65,9 +67,9 @@ func NewProxy(config Config, logger *logrus.Logger) *Proxy {
 		ReadBufferSize:   config.ReadBufferSize,
 		WriteBufferSize:  config.WriteBufferSize,
 		HandshakeTimeout: config.HandshakeTimeout,
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
+		// The client's Origin is forwarded to the upstream, which accepted the same handshake
+		// before the client is upgraded, so the origin decision belongs to the upstream.
+		CheckOrigin:       func(r *http.Request) bool { return true },
 		EnableCompression: config.EnableCompression,
 	}
 
@@ -78,138 +80,158 @@ func NewProxy(config Config, logger *logrus.Logger) *Proxy {
 	}
 }
 
-func (p *Proxy) ProxyWebSocket(c echo.Context, targetURL string) error {
-	clientConn, err := p.upgrader.Upgrade(c.Response(), c.Request(), nil)
-	if err != nil {
-		p.logger.WithError(err).Error("Failed to upgrade client connection")
-		return err
-	}
+// handshakeHeaders are set by the websocket library itself and must not be copied.
+var handshakeHeaders = map[string]bool{
+	"Upgrade":                  true,
+	"Connection":               true,
+	"Sec-Websocket-Key":        true,
+	"Sec-Websocket-Version":    true,
+	"Sec-Websocket-Extensions": true,
+	"Sec-Websocket-Protocol":   true,
+	"Host":                     true,
+	"Content-Length":           true,
+	"Keep-Alive":               true,
+	"Proxy-Connection":         true,
+	"Te":                       true,
+	"Trailer":                  true,
+	"Transfer-Encoding":        true,
+}
 
+// ProxyWebSocket proxies the client's WebSocket handshake to targetURL (http(s) or ws(s)),
+// forwarding the client's headers.
+func (p *Proxy) ProxyWebSocket(c echo.Context, targetURL string) error {
+	return p.Proxy(c, targetURL, nil)
+}
+
+// Proxy connects to the upstream first, with the client's headers (minus handshake headers)
+// plus extra, and only then upgrades the client, so an upstream refusal reaches the client as an
+// HTTP status instead of a socket that closes at once. Messages are then relayed both ways
+// until either side closes.
+func (p *Proxy) Proxy(c echo.Context, targetURL string, extra http.Header) error {
+	req := c.Request()
 	target, err := url.Parse(targetURL)
 	if err != nil {
-		_ = clientConn.Close()
-		return err
+		return echo.NewHTTPError(http.StatusBadGateway, "Invalid WebSocket target")
+	}
+	switch target.Scheme {
+	case "https", "wss":
+		target.Scheme = "wss"
+	default:
+		target.Scheme = "ws"
 	}
 
-	wsScheme := "ws"
-	if target.Scheme == "https" {
-		wsScheme = "wss"
+	header := http.Header{}
+	for k, vals := range req.Header {
+		if !handshakeHeaders[http.CanonicalHeaderKey(k)] {
+			header[k] = append([]string(nil), vals...)
+		}
 	}
-
-	wsURL := fmt.Sprintf("%s://%s%s", wsScheme, target.Host, target.Path)
-	if target.RawQuery != "" {
-		wsURL += "?" + target.RawQuery
+	for k, vals := range extra {
+		header[k] = append([]string(nil), vals...)
 	}
 
 	dialer := websocket.Dialer{
-		HandshakeTimeout: p.config.HandshakeTimeout,
+		HandshakeTimeout:  p.config.HandshakeTimeout,
+		ReadBufferSize:    p.config.ReadBufferSize,
+		WriteBufferSize:   p.config.WriteBufferSize,
+		Subprotocols:      websocket.Subprotocols(req),
+		EnableCompression: p.config.EnableCompression,
+		Proxy:             http.ProxyFromEnvironment,
+	}
+	serverConn, resp, err := dialer.DialContext(req.Context(), target.String(), header)
+	if err != nil {
+		p.logger.WithError(err).WithField("target", target.Redacted()).Warn("WebSocket upstream handshake failed")
+		if resp != nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode >= 400 {
+				return echo.NewHTTPError(resp.StatusCode, http.StatusText(resp.StatusCode))
+			}
+		}
+		return echo.NewHTTPError(http.StatusBadGateway, "WebSocket upstream unavailable")
 	}
 
-	serverConn, _, err := dialer.Dial(wsURL, nil)
+	upgradeHeader := http.Header{}
+	if proto := serverConn.Subprotocol(); proto != "" {
+		upgradeHeader.Set("Sec-WebSocket-Protocol", proto)
+	}
+	clientConn, err := p.upgrader.Upgrade(c.Response(), req, upgradeHeader)
 	if err != nil {
-		p.logger.WithError(err).WithField("target", wsURL).Error("Failed to connect to target WebSocket")
-		_ = clientConn.Close()
-		return err
+		_ = serverConn.Close()
+		p.logger.WithError(err).Debug("Failed to upgrade client connection")
+		return nil // the upgrader already wrote the HTTP error
 	}
 
 	conn := &Connection{
 		clientConn: clientConn,
 		serverConn: serverConn,
 		proxy:      p,
-		target:     wsURL,
+		target:     target.Redacted(),
 		done:       make(chan struct{}),
 	}
+	clientConn.SetReadLimit(p.config.MaxMessageSize)
+	serverConn.SetReadLimit(p.config.MaxMessageSize)
 
-	go conn.proxyClientToServer()
-	go conn.proxyServerToClient()
+	go conn.pump(clientConn, serverConn, "client")
+	go conn.pump(serverConn, clientConn, "server")
+	go conn.keepAlive()
 
 	<-conn.done
-
 	return nil
 }
 
-func (c *Connection) proxyClientToServer() {
+// pump relays messages from src to dst. The read deadline is extended after every message and
+// every pong (it was set once, so busy connections were dropped after ReadTimeout).
+func (c *Connection) pump(src, dst *websocket.Conn, from string) {
 	defer c.close()
 
-	err := c.clientConn.SetReadDeadline(time.Now().Add(c.proxy.config.ReadTimeout))
-	if err != nil {
-		c.proxy.logger.WithError(err).Error("Failed to set read deadline on client connection")
+	extend := func() error { return src.SetReadDeadline(time.Now().Add(c.proxy.config.ReadTimeout)) }
+	if err := extend(); err != nil {
 		return
 	}
-
-	c.clientConn.SetPongHandler(func(string) error {
-		err := c.clientConn.SetReadDeadline(time.Now().Add(c.proxy.config.ReadTimeout))
-		if err != nil {
-			c.proxy.logger.WithError(err).Error("Failed to set read deadline in pong handler")
-		}
-		return nil
-	})
+	src.SetPongHandler(func(string) error { return extend() })
 
 	for {
-		messageType, data, err := c.clientConn.ReadMessage()
+		messageType, data, err := src.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				c.proxy.logger.WithError(err).Error("Unexpected WebSocket close error from client")
+			var closeErr *websocket.CloseError
+			if errors.As(err, &closeErr) {
+				// Pass the close code on to the other side.
+				msg := websocket.FormatCloseMessage(closeErr.Code, closeErr.Text)
+				_ = dst.WriteControl(websocket.CloseMessage, msg, time.Now().Add(c.proxy.config.WriteTimeout))
+			} else if !errors.Is(err, websocket.ErrReadLimit) {
+				c.proxy.logger.WithError(err).WithField("from", from).Debug("WebSocket read ended")
 			}
-			break
+			return
 		}
-
-		if int64(len(data)) > c.proxy.config.MaxMessageSize {
-			c.proxy.logger.Error("Message size exceeds maximum allowed size")
-			break
+		if err := extend(); err != nil {
+			return
 		}
-
-		if err := c.serverConn.SetWriteDeadline(time.Now().Add(c.proxy.config.WriteTimeout)); err != nil {
-			c.proxy.logger.WithError(err).Error("Failed to set write deadline on server connection")
-			break
+		if err := dst.SetWriteDeadline(time.Now().Add(c.proxy.config.WriteTimeout)); err != nil {
+			return
 		}
-
-		if err := c.serverConn.WriteMessage(messageType, data); err != nil {
-			c.proxy.logger.WithError(err).Error("Failed to write message to server")
-			break
+		if err := dst.WriteMessage(messageType, data); err != nil {
+			c.proxy.logger.WithError(err).WithField("from", from).Debug("WebSocket write failed")
+			return
 		}
 	}
 }
 
-func (c *Connection) proxyServerToClient() {
-	defer c.close()
-
-	err := c.serverConn.SetReadDeadline(time.Now().Add(c.proxy.config.ReadTimeout))
-	if err != nil {
-		c.proxy.logger.WithError(err).Error("Failed to set read deadline on server connection")
-		return
-	}
-
-	c.serverConn.SetPongHandler(func(string) error {
-		err := c.serverConn.SetReadDeadline(time.Now().Add(c.proxy.config.ReadTimeout))
-		if err != nil {
-			c.proxy.logger.WithError(err).Error("Failed to set read deadline in pong handler")
-		}
-		return nil
-	})
-
+// keepAlive pings both sides so idle connections stay open and dead peers are noticed.
+// WriteControl may be called concurrently with the pumps' writes.
+func (c *Connection) keepAlive() {
+	ticker := time.NewTicker(c.proxy.config.PingPeriod)
+	defer ticker.Stop()
 	for {
-		messageType, data, err := c.serverConn.ReadMessage()
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				c.proxy.logger.WithError(err).Error("Unexpected WebSocket close error from server")
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+			deadline := time.Now().Add(c.proxy.config.WriteTimeout)
+			if c.clientConn.WriteControl(websocket.PingMessage, nil, deadline) != nil ||
+				c.serverConn.WriteControl(websocket.PingMessage, nil, deadline) != nil {
+				c.close()
+				return
 			}
-			break
-		}
-
-		if int64(len(data)) > c.proxy.config.MaxMessageSize {
-			c.proxy.logger.Error("Message size exceeds maximum allowed size")
-			break
-		}
-
-		if err := c.clientConn.SetWriteDeadline(time.Now().Add(c.proxy.config.WriteTimeout)); err != nil {
-			c.proxy.logger.WithError(err).Error("Failed to set write deadline on client connection")
-			break
-		}
-
-		if err := c.clientConn.WriteMessage(messageType, data); err != nil {
-			c.proxy.logger.WithError(err).Error("Failed to write message to client")
-			break
 		}
 	}
 }
@@ -237,7 +259,7 @@ func (p *Proxy) HandleWebSocketUpgrade(c echo.Context) error {
 func WebSocketMiddleware(proxy *Proxy) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if isWebSocketUpgrade(c.Request()) {
+			if IsUpgradeRequest(c.Request()) {
 				targetURL, ok := c.Get("target_url").(string)
 				if !ok || targetURL == "" {
 					return echo.NewHTTPError(http.StatusBadRequest, "No target URL specified for WebSocket")
@@ -249,6 +271,23 @@ func WebSocketMiddleware(proxy *Proxy) echo.MiddlewareFunc {
 	}
 }
 
-func isWebSocketUpgrade(r *http.Request) bool {
-	return r.Header.Get("Connection") == "Upgrade" && r.Header.Get("Upgrade") == "websocket"
+// IsUpgradeRequest reports whether r asks to switch to the WebSocket protocol. Connection is a
+// token list ("keep-alive, Upgrade" is common), and both values are case-insensitive.
+func IsUpgradeRequest(r *http.Request) bool {
+	if !strings.EqualFold(strings.TrimSpace(r.Header.Get("Upgrade")), "websocket") {
+		return false
+	}
+	for _, v := range r.Header.Values("Connection") {
+		for _, token := range strings.Split(v, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), "upgrade") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// String describes the connection for logs.
+func (c *Connection) String() string {
+	return fmt.Sprintf("websocket proxy to %s", c.target)
 }
