@@ -69,8 +69,8 @@ check with `git log -1 --format=%B`. Never commit `.env` or real secrets.
 
 ## Gotchas
 
-- A YAML key that does not exist in the schema is silently ignored (AUDIT COR-24); check field
-  names against `pkg/config/config.go`.
+- A YAML key that does not exist in the schema has no effect; Odin logs a warning with its line
+  (`config.UnknownKeys`). Check field names against `pkg/config/config.go`.
 - `config.ServiceConfig` and `service.Config` are separate types: a new field must be copied in
   `gateway.go` or it does nothing.
 - The admin writes the config file atomically in its directory; in the containers that file is

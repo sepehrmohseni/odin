@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -187,4 +189,25 @@ func TestMergeServices(t *testing.T) {
 	assert.Equal(t, "http", added[0].Protocol, "defaults applied")
 	assert.Len(t, skipped, 2)
 	assert.Len(t, file, 1, "the file's list is not modified")
+}
+
+// COR-24: a misspelt key is reported (with its line) instead of silently doing nothing, and the
+// file still loads.
+func TestUnknownKeysAreReported(t *testing.T) {
+	data := []byte("server:\n  port: 8080\nratelimit:\n  enabled: true\nservices:\n  - name: a\n    basepath: /a\n    targets: [http://a]\n")
+	var cfg config.Config
+	unknown := config.UnknownKeys(data, &cfg)
+	assert.Equal(t, []string{`line 3: unknown key "ratelimit"`, `line 7: unknown key "basepath"`}, unknown)
+	assert.Empty(t, config.UnknownKeys([]byte("server:\n  port: 8080\n"), &config.Config{}))
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("server:\n  port: 8080\nratelimit:\n  enabled: true\n"), 0o600))
+	var buf bytes.Buffer
+	logger := logrus.New()
+	logger.SetOutput(&buf)
+	loaded, err := config.Load(path, logger)
+	require.NoError(t, err, "unknown keys warn, they do not stop the gateway")
+	assert.Equal(t, 8080, loaded.Server.Port)
+	assert.Contains(t, buf.String(), `line 3: unknown key \"ratelimit\"`)
 }

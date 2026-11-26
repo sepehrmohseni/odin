@@ -1,5 +1,4 @@
 server:
-  host: "localhost"  
   port: 8080
 
 services:
@@ -32,28 +31,25 @@ services:
     targets:
       - localhost:50051
     authentication: true
+    timeout: 30s
     grpc:
-      timeout: 30s
-      maxReceiveMessageSize: 4194304
-      maxSendMessageSize: 4194304
+      maxMessageSize: 4194304
 
 auth:
-  jwt:
-    secret: "your-secret-key-here"
-    expiration: 24h
+  jwtSecret: ${ODIN_JWT_SECRET}
 
-caching:
+cache:
   enabled: true
-  strategy: memory
+  strategy: local
   ttl: 10m
 
 rateLimit:
   enabled: true
   limit: 100
   duration: 1m
-  strategy: "sliding-window"
+  strategy: local
+  algorithm: sliding_window
 
 monitoring:
-  metrics:
-    enabled: true
-    path: "/metrics"
+  enabled: true
+  path: /metrics

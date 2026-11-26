@@ -71,6 +71,10 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   running chain (they only changed the database record) and accept only the pipeline's phases;
   the API works without MongoDB. The unimplemented "compile" endpoint and the bulk
   enable/disable endpoints, which only flipped database flags, are removed (MNT-03).
+- Unknown configuration keys are logged as warnings with their file and line; they were ignored
+  silently, so a misspelt key did nothing without notice (COR-24). The example configs that
+  used keys which do not exist are corrected, and two examples of a `routes:` file format that
+  nothing reads are removed.
 - The admin's monitoring WebSocket gives each client its own writer: the first snapshot could
   race a broadcast on the same connection, and one slow client held up all others (COR-13).
 - GraphQL proxying (COR-10): `__typename` is no longer blocked as introspection (it broke Apollo

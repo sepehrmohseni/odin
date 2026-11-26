@@ -111,5 +111,7 @@ never runs with routes silently missing.
 
 At startup Odin rejects: a port outside 1-65535, services without a name, base path or targets,
 targets that are not `http(s)://host[:port]`, invalid `auth.ignorePathRegexes`, an unknown
-`rateLimit.algorithm` or `rateLimit.strategy`, and unparsable `services.yaml`. Keys that are not
-part of the schema are ignored, so check spelling against the reference.
+`rateLimit.algorithm` or `rateLimit.strategy`, and unparsable `services.yaml`. A key that is not
+part of the schema (a misspelling, or a key from an older version) has no effect; Odin logs a
+warning with its file and line, for example
+`config.yaml line 12: unknown key "ratelimit": it has no effect`, and starts anyway.

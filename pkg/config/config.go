@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"odin/pkg/transform"
@@ -647,6 +650,7 @@ func Load(configPath string, logger *logrus.Logger) (*Config, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
+	warnUnknownKeys(logger, configPath, data, &Config{})
 
 	// Set defaults
 	if config.Server.Port == 0 {
@@ -704,6 +708,9 @@ func Load(configPath string, logger *logrus.Logger) (*Config, error) {
 			if err := yaml.Unmarshal(servicesData, &servicesConfig); err != nil {
 				return nil, fmt.Errorf("failed to parse %s: %w", servicesPath, err)
 			}
+			warnUnknownKeys(logger, servicesPath, servicesData, &struct {
+				Services []ServiceConfig `yaml:"services"`
+			}{})
 			// A service defined in both files keeps its config.yaml definition. (Older admin
 			// versions copied services.yaml entries into config.yaml on every save.)
 			defined := make(map[string]bool, len(config.Services))
@@ -821,4 +828,34 @@ func MergeServices(file, stored []ServiceConfig) (merged, added []ServiceConfig,
 		added = append(added, s)
 	}
 	return merged, added, skipped
+}
+
+var unknownField = regexp.MustCompile(`line (\d+): field (\S+) not found in type \S+`)
+
+// UnknownKeys lists the keys in data that into's schema does not have, as
+// "line N: unknown key name". YAML is decoded leniently (unknown keys are ignored, so older and
+// newer files load), which made a misspelt key silently do nothing (AUDIT COR-24).
+func UnknownKeys(data []byte, into interface{}) []string {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	var te *yaml.TypeError
+	if err := dec.Decode(into); !errors.As(err, &te) {
+		return nil
+	}
+	var out []string
+	for _, e := range te.Errors {
+		if m := unknownField.FindStringSubmatch(e); m != nil {
+			out = append(out, fmt.Sprintf("line %s: unknown key %q", m[1], m[2]))
+		}
+	}
+	return out
+}
+
+func warnUnknownKeys(logger *logrus.Logger, path string, data []byte, into interface{}) {
+	if logger == nil {
+		return
+	}
+	for _, k := range UnknownKeys(data, into) {
+		logger.Warnf("%s %s: it has no effect; check its spelling against the configuration reference", path, k)
+	}
 }

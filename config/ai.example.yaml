@@ -56,16 +56,10 @@ ai:
   alertWebhookUrl: "https://your-webhook-endpoint.com/alerts"
   
   # Data retention in days
-  # Traffic patterns and anomalies older than this are auto-deleted
+  # With MongoDB, anomalies older than this are deleted automatically
   # Recommended: 30-90 days
   # Consider storage costs for longer retention
   retentionDays: 90
-  
-  # Flush interval - how often to save collected data to MongoDB
-  # Shorter = more real-time, more MongoDB writes
-  # Longer = less MongoDB load, less granular data
-  # Recommended: 1m for most use cases
-  flushInterval: 1m
   
   # Optional tags for filtering and organization
   tags:
