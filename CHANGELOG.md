@@ -6,6 +6,10 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-26
+
+First release: the hardening pass described in docs/AUDIT.md.
+
 ### Security
 
 - The admin interface is only served when `admin.enabled` is true; it used to be served with
@@ -67,3 +71,6 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   Postman export overwrote collections (COR-15); a zero Postman sync interval crash-looped the
   gateway (COR-14); MongoDB was disabled without `connectTimeout` (COR-18); OTLP endpoint URLs
   were rejected (COR-25); shutdown order and leaks (OPS-02); unbounded metric labels (OPS-03).
+
+[Unreleased]: https://github.com/sepehrmohseni/odin/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sepehrmohseni/odin/releases/tag/v0.1.0
