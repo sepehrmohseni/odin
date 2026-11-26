@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -375,10 +374,4 @@ func (h *MongoDBServiceHandler) GetStatistics(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, stats)
-}
-
-// Helper to convert response to JSON bytes
-func toJSON(v interface{}) []byte {
-	b, _ := json.Marshal(v)
-	return b
 }

@@ -25,9 +25,10 @@ func (pu *PluginUploader) ListPlugins(c echo.Context) error {
 
 	// Filter by enabled status
 	if enabled := c.QueryParam("enabled"); enabled != "" {
-		if enabled == "true" {
+		switch enabled {
+		case "true":
 			filter["enabled"] = true
-		} else if enabled == "false" {
+		case "false":
 			filter["enabled"] = false
 		}
 	}
@@ -154,7 +155,7 @@ func (pu *PluginUploader) EnablePlugin(c echo.Context, pm *PluginManager) error 
 		pu.logger.WithError(err).WithField("path", tempPath).Error("Failed to open plugin")
 
 		// Update plugin status to error
-		pu.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{
+		_, _ = pu.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{
 			"$set": bson.M{
 				"status":        "error",
 				"error_message": err.Error(),
@@ -230,7 +231,7 @@ func (pu *PluginUploader) EnablePlugin(c echo.Context, pm *PluginManager) error 
 	pu.logger.WithField("plugin", pluginInfo.Name).Info("Plugin enabled successfully")
 
 	// Get updated plugin info
-	pu.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&pluginInfo)
+	_ = pu.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&pluginInfo) // best effort refresh
 
 	return c.JSON(200, map[string]interface{}{
 		"success": true,
@@ -300,7 +301,7 @@ func (pu *PluginUploader) DisablePlugin(c echo.Context, pm *PluginManager) error
 	pu.logger.WithField("plugin", pluginInfo.Name).Info("Plugin disabled successfully")
 
 	// Get updated plugin info
-	pu.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&pluginInfo)
+	_ = pu.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&pluginInfo) // best effort refresh
 
 	return c.JSON(200, map[string]interface{}{
 		"success": true,
@@ -412,7 +413,7 @@ func (pu *PluginUploader) UpdatePluginConfig(c echo.Context) error {
 
 	// Get updated plugin
 	var pluginInfo PluginInfo
-	pu.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&pluginInfo)
+	_ = pu.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&pluginInfo) // best effort refresh
 
 	pu.logger.WithField("plugin", pluginInfo.Name).Info("Plugin configuration updated")
 

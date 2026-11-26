@@ -105,7 +105,7 @@ func (h *AIHandler) ListAnomalies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"anomalies": anomalies,
 		"count":     len(anomalies),
 		"filter":    filter,
@@ -130,7 +130,7 @@ func (h *AIHandler) GetAnomaly(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(anomaly)
+	_ = json.NewEncoder(w).Encode(anomaly)
 }
 
 // ResolveAnomaly marks an anomaly as resolved
@@ -146,7 +146,7 @@ func (h *AIHandler) ResolveAnomaly(w http.ResponseWriter, r *http.Request) {
 	h.logger.WithField("anomaly_id", id).Info("Anomaly resolved")
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"message": "Anomaly resolved",
 	})
@@ -165,7 +165,7 @@ func (h *AIHandler) MarkFalsePositive(w http.ResponseWriter, r *http.Request) {
 	h.logger.WithField("anomaly_id", id).Info("Anomaly marked as false positive")
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"message": "Marked as false positive",
 	})
@@ -194,7 +194,7 @@ func (h *AIHandler) ListBaselines(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"baselines": baselines,
 		"count":     len(baselines),
 	})
@@ -212,7 +212,7 @@ func (h *AIHandler) GetServiceBaselines(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"service":   serviceName,
 		"baselines": baselines,
 		"count":     len(baselines),
@@ -274,7 +274,7 @@ func (h *AIHandler) GetStatistics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	_ = json.NewEncoder(w).Encode(stats)
 }
 
 // GetConfig returns current AI configuration
@@ -293,7 +293,7 @@ func (h *AIHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	_ = json.NewEncoder(w).Encode(config)
 }
 
 // UpdateConfig updates AI configuration
@@ -311,7 +311,7 @@ func (h *AIHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	h.logger.WithField("config", config).Info("AI configuration updated")
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"message": "Configuration updated successfully",
 		"config":  config,

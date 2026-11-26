@@ -30,7 +30,7 @@ func Middleware(runtime Runtime, logger *logrus.Logger) echo.MiddlewareFunc {
 			// Create plugin context
 			pluginCtx := &PluginContext{
 				RequestID: c.Response().Header().Get(echo.HeaderXRequestID),
-				ServiceID: c.Get("service_id").(string),
+				ServiceID: contextString(c, "service_id"),
 				RoutePath: c.Path(),
 				Metadata:  make(map[string]string),
 			}
@@ -82,10 +82,15 @@ func Middleware(runtime Runtime, logger *logrus.Logger) echo.MiddlewareFunc {
 			// Execute response plugins
 			for _, plugin := range applicablePlugins {
 				if plugin.Type() == PluginTypeResponse || plugin.Type() == PluginTypeMiddleware {
+					// The body is only available when an earlier middleware buffered it.
+					var body []byte
+					if bw, ok := c.Response().Writer.(interface{ Bytes() []byte }); ok {
+						body = bw.Bytes()
+					}
 					resp := &HTTPResponse{
 						StatusCode: c.Response().Status,
 						Headers:    c.Response().Header(),
-						Body:       c.Response().Writer.(interface{ Bytes() []byte }).Bytes(),
+						Body:       body,
 					}
 
 					result, err := plugin.Execute(c.Request().Context(), pluginCtx, resp)
@@ -126,7 +131,9 @@ func filterPluginsForRequest(plugins []Plugin, c echo.Context) []Plugin {
 			if len(config.AllowedURLs) > 0 {
 				matched := false
 				for _, pattern := range config.AllowedURLs {
-					if matched, _ := regexp.MatchString(pattern, c.Request().URL.Path); matched {
+					// (The old `if matched, _ := ...` shadowed the outer variable, so a plugin
+					// with allowedUrls never applied.)
+					if ok, _ := regexp.MatchString(pattern, c.Request().URL.Path); ok {
 						matched = true
 						break
 					}
@@ -295,4 +302,10 @@ func ExecutePluginHandler(runtime Runtime, logger *logrus.Logger) echo.HandlerFu
 
 		return c.JSON(http.StatusOK, result)
 	}
+}
+
+// contextString returns a string value stored on the Echo context, or "" when it is missing.
+func contextString(c echo.Context, key string) string {
+	s, _ := c.Get(key).(string)
+	return s
 }

@@ -78,8 +78,8 @@ func loadJWTSecret() (string, error) {
 	}
 
 	for _, path := range secretsPaths {
-		if _, err := os.Stat(path); err == nil {
-			data, err := os.ReadFile(path)
+		if _, err := os.Stat(path); err == nil { //nolint:gosec // fixed list of well-known locations
+			data, err := os.ReadFile(path) //nolint:gosec // fixed list of well-known locations
 			if err != nil {
 				continue
 			}

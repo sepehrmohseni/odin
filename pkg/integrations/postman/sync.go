@@ -2,7 +2,7 @@ package postman
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -388,8 +388,8 @@ func (s *SyncEngine) calculateHash(collection *PostmanCollection) (string, error
 		return "", err
 	}
 
-	// Calculate MD5 hash
-	hash := md5.Sum(data)
+	// Calculate a content hash
+	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash), nil
 }
 

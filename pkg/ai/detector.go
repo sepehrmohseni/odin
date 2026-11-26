@@ -451,9 +451,12 @@ func (ad *AnomalyDetector) calculateBaseline(serviceName string, patterns []*Tra
 
 	for _, p := range patterns {
 		requestRate := float64(p.RequestCount) / 60.0
-		sumSqDiffRequestRate += math.Pow(requestRate-avgRequestRate, 2)
-		sumSqDiffErrorRate += math.Pow(p.ErrorRate-avgErrorRate, 2)
-		sumSqDiffLatency += math.Pow(p.AvgLatency-avgLatency, 2)
+		dRequestRate := requestRate - avgRequestRate
+		dErrorRate := p.ErrorRate - avgErrorRate
+		dLatency := p.AvgLatency - avgLatency
+		sumSqDiffRequestRate += dRequestRate * dRequestRate
+		sumSqDiffErrorRate += dErrorRate * dErrorRate
+		sumSqDiffLatency += dLatency * dLatency
 	}
 
 	stdDevRequestRate := math.Sqrt(sumSqDiffRequestRate / count)

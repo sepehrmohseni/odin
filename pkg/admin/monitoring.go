@@ -277,16 +277,25 @@ func (mc *MonitoringCollector) BroadcastMetrics() {
 		return
 	}
 
+	// Write under the read lock, but delete dead clients under the write lock: deleting from
+	// the map while only holding RLock is a concurrent map write.
+	var dead []*websocket.Conn
 	mc.wsClientsMutex.RLock()
-	defer mc.wsClientsMutex.RUnlock()
-
 	for client := range mc.wsClients {
-		err := client.WriteMessage(websocket.TextMessage, data)
-		if err != nil {
+		if err := client.WriteMessage(websocket.TextMessage, data); err != nil {
 			log.Printf("Error writing to websocket: %v", err)
-			client.Close()
+			dead = append(dead, client)
+		}
+	}
+	mc.wsClientsMutex.RUnlock()
+
+	if len(dead) > 0 {
+		mc.wsClientsMutex.Lock()
+		for _, client := range dead {
+			_ = client.Close()
 			delete(mc.wsClients, client)
 		}
+		mc.wsClientsMutex.Unlock()
 	}
 }
 
@@ -337,7 +346,9 @@ func WebSocketMonitoring(c echo.Context) error {
 	// Send initial metrics
 	metrics := collector.GetMetrics()
 	if data, err := json.Marshal(metrics); err == nil {
-		ws.WriteMessage(websocket.TextMessage, data)
+		if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
+			return nil
+		}
 	}
 
 	// Keep connection alive and handle ping/pong

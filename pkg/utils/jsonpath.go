@@ -16,9 +16,7 @@ func JSONPath(data []byte, path string) (interface{}, error) {
 	}
 
 	// Remove $. prefix
-	if strings.HasPrefix(path, "$.") {
-		path = path[2:]
-	}
+	path = strings.TrimPrefix(path, "$.")
 
 	// Split path components
 	components := strings.Split(path, ".")
@@ -78,9 +76,7 @@ func JSONPath(data []byte, path string) (interface{}, error) {
 
 // SetJSONPath sets a value at a specific path in a JSON object
 func SetJSONPath(data map[string]interface{}, path string, value interface{}) error {
-	if strings.HasPrefix(path, "$.") {
-		path = path[2:]
-	}
+	path = strings.TrimPrefix(path, "$.")
 
 	components := strings.Split(path, ".")
 	current := data

@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -49,12 +51,23 @@ func NewProxy(config *ProxyConfig, logger *logrus.Logger) (*Proxy, error) {
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(config.MaxMessageSize)),
 	}
 
-	if !config.EnableTLS {
+	if config.EnableTLS {
+		// Verify the server against the system roots; present a client certificate if one is set.
+		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+		if config.TLSCertFile != "" && config.TLSKeyFile != "" {
+			cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load gRPC client certificate: %w", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	} else {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	// Establish connection to gRPC service
-	conn, err := grpc.Dial(config.Target, opts...)
+	// Create the client; it connects lazily on the first call.
+	conn, err := grpc.NewClient(config.Target, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC service: %w", err)
 	}
@@ -185,9 +198,8 @@ func (p *Proxy) shouldSkipHeader(header string) bool {
 		"Connection",
 	}
 
-	headerLower := strings.ToLower(header)
 	for _, skip := range skipHeaders {
-		if strings.ToLower(skip) == headerLower {
+		if strings.EqualFold(skip, header) {
 			return true
 		}
 	}

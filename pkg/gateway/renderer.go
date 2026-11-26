@@ -21,7 +21,7 @@ func NewTemplateRenderer() *TemplateRenderer {
 func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
 	tmpl, ok := t.templates[name]
 	if !ok {
-		tmplPath := filepath.Join("pkg/admin/templates", name)
+		tmplPath := filepath.Join("pkg", "admin", "templates", name)
 		var err error
 		tmpl, err = template.ParseFiles(tmplPath)
 		if err != nil {

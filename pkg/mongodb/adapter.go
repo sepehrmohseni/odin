@@ -8,6 +8,7 @@ import (
 	"odin/pkg/config"
 
 	"github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // ServiceAdapter adapts between config.ServiceConfig and mongodb.ServiceDocument
@@ -127,17 +128,17 @@ func (a *ServiceAdapter) documentToConfig(doc *ServiceDocument) config.ServiceCo
 	if doc.HealthCheck != nil {
 		hc := doc.HealthCheck
 		svc.HealthCheck = &config.HealthCheckConfig{
-			Enabled:            hc["enabled"].(bool),
-			Interval:           time.Duration(hc["interval"].(int64)) * time.Millisecond,
-			Timeout:            time.Duration(hc["timeout"].(int64)) * time.Millisecond,
-			UnhealthyThreshold: int(hc["unhealthyThreshold"].(int64)),
-			HealthyThreshold:   int(hc["healthyThreshold"].(int64)),
-			InsecureSkipVerify: hc["insecureSkipVerify"].(bool),
+			Enabled:            asBool(hc["enabled"]),
+			Interval:           time.Duration(asInt64(hc["interval"])) * time.Millisecond,
+			Timeout:            time.Duration(asInt64(hc["timeout"])) * time.Millisecond,
+			UnhealthyThreshold: int(asInt64(hc["unhealthyThreshold"])),
+			HealthyThreshold:   int(asInt64(hc["healthyThreshold"])),
+			InsecureSkipVerify: asBool(hc["insecureSkipVerify"]),
 		}
-		if expectedStatus, ok := hc["expectedStatus"].([]interface{}); ok {
+		if expectedStatus, ok := asSlice(hc["expectedStatus"]); ok {
 			statuses := make([]int, 0, len(expectedStatus))
 			for _, s := range expectedStatus {
-				statuses = append(statuses, int(s.(int64)))
+				statuses = append(statuses, int(asInt64(s)))
 			}
 			svc.HealthCheck.ExpectedStatus = statuses
 		}
@@ -204,14 +205,14 @@ func convertTransformRules(data interface{}) []config.TransformRule {
 		return nil
 	}
 
-	rules, ok := data.([]interface{})
+	rules, ok := asSlice(data)
 	if !ok {
 		return nil
 	}
 
 	result := make([]config.TransformRule, 0, len(rules))
 	for _, r := range rules {
-		ruleMap, ok := r.(map[string]interface{})
+		ruleMap, ok := asMap(r)
 		if !ok {
 			continue
 		}
@@ -232,14 +233,14 @@ func convertDependencies(data map[string]interface{}) []config.DependencyConfig 
 		return nil
 	}
 
-	deps, ok := data["dependencies"].([]interface{})
+	deps, ok := asSlice(data["dependencies"])
 	if !ok {
 		return nil
 	}
 
 	result := make([]config.DependencyConfig, 0, len(deps))
 	for _, d := range deps {
-		depMap, ok := d.(map[string]interface{})
+		depMap, ok := asMap(d)
 		if !ok {
 			continue
 		}
@@ -249,11 +250,11 @@ func convertDependencies(data map[string]interface{}) []config.DependencyConfig 
 			Path:    getString(depMap, "path"),
 		}
 
-		if paramMap, ok := depMap["parameterMapping"].([]interface{}); ok {
+		if paramMap, ok := asSlice(depMap["parameterMapping"]); ok {
 			dep.ParameterMapping = convertMappings(paramMap)
 		}
 
-		if resultMap, ok := depMap["resultMapping"].([]interface{}); ok {
+		if resultMap, ok := asSlice(depMap["resultMapping"]); ok {
 			dep.ResultMapping = convertMappings(resultMap)
 		}
 
@@ -270,7 +271,7 @@ func convertMappings(data []interface{}) []config.MappingConfig {
 
 	result := make([]config.MappingConfig, 0, len(data))
 	for _, m := range data {
-		mMap, ok := m.(map[string]interface{})
+		mMap, ok := asMap(m)
 		if !ok {
 			continue
 		}
@@ -408,4 +409,53 @@ func mapToConfig(data map[string]interface{}) *config.Config {
 	cfg := &config.Config{}
 	// Populate fields from data
 	return cfg
+}
+
+// BSON decodes numbers as int32, int64 or float64 and arrays as primitive.A, so plain type
+// assertions such as v.(int64) or v.([]interface{}) panic or silently fail on stored documents.
+// These helpers accept every form the driver produces.
+
+func asInt64(v interface{}) int64 {
+	switch n := v.(type) {
+	case int32:
+		return int64(n)
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		return int64(n)
+	}
+	return 0
+}
+
+func asBool(v interface{}) bool {
+	b, _ := v.(bool)
+	return b
+}
+
+func asSlice(v interface{}) ([]interface{}, bool) {
+	switch s := v.(type) {
+	case primitive.A:
+		return s, true
+	case []interface{}:
+		return s, true
+	}
+	return nil, false
+}
+
+func asMap(v interface{}) (map[string]interface{}, bool) {
+	switch m := v.(type) {
+	case map[string]interface{}:
+		return m, true
+	case primitive.M:
+		return m, true
+	case primitive.D:
+		out := make(map[string]interface{}, len(m))
+		for _, e := range m {
+			out[e.Key] = e.Value
+		}
+		return out, true
+	}
+	return nil, false
 }

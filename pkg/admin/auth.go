@@ -75,11 +75,13 @@ func (h *AdminHandler) handleLoginPost(c echo.Context) error {
 
 	if username == h.username && password == h.password {
 		authValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-		cookie := http.Cookie{
+		cookie := http.Cookie{ //nolint:gosec // Secure follows the request scheme so plain-HTTP dev setups still work
 			Name:     "Authorization",
 			Value:    authValue,
 			Path:     "/admin",
 			HttpOnly: true,
+			Secure:   c.Scheme() == "https",
+			SameSite: http.SameSiteStrictMode,
 			MaxAge:   3600 * 24,
 		}
 		c.SetCookie(&cookie)

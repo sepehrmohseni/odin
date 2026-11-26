@@ -1,7 +1,6 @@
 package config
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -31,7 +30,7 @@ services:
     stripBasePath: true
 `
 
-	tmpFile, err := ioutil.TempFile("", "config-*.yaml")
+	tmpFile, err := os.CreateTemp("", "config-*.yaml")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 
@@ -157,7 +156,7 @@ services:
     authentication: true
 `
 
-	tmpFile, err := ioutil.TempFile("", "config-*.yaml")
+	tmpFile, err := os.CreateTemp("", "config-*.yaml")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 

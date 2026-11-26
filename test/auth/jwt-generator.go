@@ -31,8 +31,8 @@ func loadJWTSecret() (string, error) {
 		"auth_secrets.yaml",
 		filepath.Join(scriptDir, "auth_secrets.yaml"),
 		filepath.Join(currentDir, "auth_secrets.yaml"),
-		filepath.Join(currentDir, "../config/auth_secrets.yaml"),
-		filepath.Join(currentDir, "../../config/auth_secrets.yaml"),
+		filepath.Join(currentDir, "..", "config", "auth_secrets.yaml"),
+		filepath.Join(currentDir, "..", "..", "config", "auth_secrets.yaml"),
 	}
 
 	fmt.Println("Current directory:", currentDir)

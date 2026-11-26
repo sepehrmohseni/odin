@@ -182,5 +182,5 @@ func (rb *RandomBalancer) NextTarget() *url.URL {
 	if len(rb.targets) == 0 {
 		return nil
 	}
-	return rb.targets[rand.Intn(len(rb.targets))]
+	return rb.targets[rand.Intn(len(rb.targets))] //nolint:gosec // load balancing, not security
 }

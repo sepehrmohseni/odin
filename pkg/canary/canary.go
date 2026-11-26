@@ -1,26 +1,19 @@
 package canary
 
 import (
-	"crypto/md5"
-	"math/rand"
+	"hash/fnv"
 	"net/http"
 	"odin/pkg/service"
 	"strings"
-	"sync"
-	"time"
 )
 
-// Router handles canary deployment routing decisions
-type Router struct {
-	mu   sync.RWMutex
-	rand *rand.Rand
-}
+// Router handles canary deployment routing decisions. It is stateless: the weight-based split
+// hashes the client IP, so a client keeps landing on the same side.
+type Router struct{}
 
 // NewRouter creates a new canary router
 func NewRouter() *Router {
-	return &Router{
-		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
-	}
+	return &Router{}
 }
 
 // ShouldUseCanary determines if a request should be routed to canary
@@ -59,12 +52,11 @@ func (r *Router) shouldRouteByWeight(req *http.Request, weight int) bool {
 	// Get client IP for consistent hashing
 	clientIP := getClientIP(req)
 
-	// Use MD5 hash of IP for consistent distribution
-	hash := md5.Sum([]byte(clientIP))
-	hashInt := int(hash[0])
-
-	// Map hash to percentage (0-100)
-	percentage := hashInt % 100
+	// Hash the IP for a consistent, evenly spread split. (The previous version used one byte
+	// of an MD5 sum, so values 0-55 were twice as likely as 56-99 and weights were skewed.)
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(clientIP))
+	percentage := int(h.Sum32() % 100)
 
 	return percentage < weight
 }

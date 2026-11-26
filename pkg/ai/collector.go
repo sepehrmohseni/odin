@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"time"
 
@@ -91,7 +92,8 @@ func (tc *TrafficCollector) Collect(data *TrafficData) {
 	pattern.AvgLatency = (pattern.AvgLatency*float64(pattern.RequestCount-1) + data.Latency) / float64(pattern.RequestCount)
 
 	// Track status codes
-	statusKey := string(rune(data.StatusCode/100)) + "xx"
+	// strconv, not string(rune(...)): the old form produced "\x02xx" instead of "2xx".
+	statusKey := strconv.Itoa(data.StatusCode/100) + "xx"
 	pattern.StatusCodes[statusKey]++
 
 	// Track user agents (limit to top 10)

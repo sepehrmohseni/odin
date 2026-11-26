@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -98,7 +99,7 @@ func NewPluginUploader(db *mongo.Database, logger *logrus.Logger) (*PluginUpload
 
 	// Create temporary upload directory
 	uploadDir := filepath.Join(os.TempDir(), "odin-plugin-uploads")
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+	if err := os.MkdirAll(uploadDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create upload directory: %w", err)
 	}
 
@@ -249,12 +250,19 @@ func (pu *PluginUploader) UploadPlugin(c echo.Context) error {
 		})
 	}
 
-	fileID := uploadStream.FileID.(primitive.ObjectID)
+	fileID, ok := uploadStream.FileID.(primitive.ObjectID)
+	if !ok {
+		return c.JSON(500, map[string]interface{}{
+			"error": "Failed to store file",
+		})
+	}
 
 	// Create plugin info
 	priorityInt := 100
 	if priority != "" {
-		fmt.Sscanf(priority, "%d", &priorityInt)
+		if p, err := strconv.Atoi(priority); err == nil {
+			priorityInt = p
+		}
 	}
 
 	if phase == "" {
@@ -297,14 +305,18 @@ func (pu *PluginUploader) UploadPlugin(c echo.Context) error {
 	result, err := pu.collection.InsertOne(ctx, pluginInfo)
 	if err != nil {
 		// Clean up GridFS file
-		pu.bucket.Delete(fileID)
+		if delErr := pu.bucket.Delete(fileID); delErr != nil {
+			pu.logger.WithError(delErr).Warn("Failed to delete orphaned GridFS file")
+		}
 		pu.logger.WithError(err).Error("Failed to save plugin metadata")
 		return c.JSON(500, map[string]interface{}{
 			"error": "Failed to save plugin",
 		})
 	}
 
-	pluginInfo.ID = result.InsertedID.(primitive.ObjectID)
+	if insertedID, ok := result.InsertedID.(primitive.ObjectID); ok {
+		pluginInfo.ID = insertedID
+	}
 
 	pu.logger.WithFields(logrus.Fields{
 		"plugin_id": pluginInfo.ID.Hex(),

@@ -471,9 +471,12 @@ func (r *repository) GetAPIKey(ctx context.Context, key string) (*APIKeyDocument
 
 	// Update last used timestamp
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// Outlive the caller's cancellation but keep its values, with our own deadline.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		col.UpdateOne(ctx, bson.M{"key": key}, bson.M{"$set": bson.M{"lastUsed": time.Now()}})
+		if _, err := col.UpdateOne(ctx, bson.M{"key": key}, bson.M{"$set": bson.M{"lastUsed": time.Now()}}); err != nil {
+			r.logger.WithError(err).Debug("Failed to update API key last-used time")
+		}
 	}()
 
 	return &apiKey, nil
@@ -589,9 +592,11 @@ func (r *repository) GetCache(ctx context.Context, key string) (*CacheDocument, 
 	// Check if expired
 	if time.Now().After(cache.ExpiresAt) {
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			r.DeleteCache(ctx, key)
+			if err := r.DeleteCache(ctx, key); err != nil {
+				r.logger.WithError(err).Debug("Failed to delete expired cache entry")
+			}
 		}()
 		return nil, fmt.Errorf("cache expired: %s", key)
 	}

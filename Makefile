@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker docker-compose helm-package helm-install
+.PHONY: build run test clean docker docker-compose helm-package helm-install check check-test check-lint ci-local ci-quick
 
 BINARY_NAME=odin
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -112,7 +112,7 @@ generate-token:
 
 install-tools:
 	@echo "Installing development tools..."
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 	go install golang.org/x/tools/cmd/goimports@latest
 
 benchmark:
@@ -169,17 +169,28 @@ help:
 	@echo "  build-plugins         - Build example plugins"
 	@echo "  clean-plugins         - Clean plugin artifacts"
 	@echo "  build-all             - Build gateway and plugins"
+	@echo "  check                 - Run all CI checks in Docker (scripts/docker-check.sh all)"
+	@echo "  check-test            - Run the race tests in Docker"
+	@echo "  check-lint            - Run golangci-lint in Docker"
 
-ci-local:
-	@echo "Running local CI simulation..."
-	@./scripts/ci-local.sh
+# The CI checks in Docker (no local Go needed); see scripts/docker-check.sh.
+check:
+	@scripts/docker-check.sh all
+
+ci-local: check
+
+check-test:
+	@scripts/docker-check.sh test
+
+check-lint:
+	@scripts/docker-check.sh lint
 
 ci-quick:
 	@echo "Quick CI check..."
 	@go mod verify
 	@go build ./...
 	@go test ./...
-	@golangci-lint run --fast
+	@golangci-lint run --fast-only
 
 pre-commit: ci-quick
 	@echo "Pre-commit checks passed!"

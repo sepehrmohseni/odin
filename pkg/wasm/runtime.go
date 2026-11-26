@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -47,8 +48,11 @@ func NewRuntime(config *Config, logger *logrus.Logger) (Runtime, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create wazero runtime with configuration
+	if config.MaxMemoryPages <= 0 || config.MaxMemoryPages > 65536 {
+		config.MaxMemoryPages = 65536 // the wasm32 maximum (4 GiB)
+	}
 	runtimeConfig := wazero.NewRuntimeConfig().
-		WithMemoryLimitPages(uint32(config.MaxMemoryPages))
+		WithMemoryLimitPages(uint32(config.MaxMemoryPages)) //nolint:gosec // bounded above
 
 	if config.CacheEnabled {
 		// Enable compilation cache
@@ -325,7 +329,10 @@ func (p *wasmPlugin) Execute(ctx context.Context, pluginCtx *PluginContext, inpu
 
 	// Get memory and write input
 	mem := p.module.Memory()
-	inputSize := uint32(len(inputJSON))
+	if len(inputJSON) > math.MaxUint32/2 {
+		return nil, fmt.Errorf("plugin input too large: %d bytes", len(inputJSON))
+	}
+	inputSize := uint32(len(inputJSON)) //nolint:gosec // bounded above
 
 	// Get current memory size and allocate at the end
 	memSize := mem.Size()
@@ -363,8 +370,11 @@ func (p *wasmPlugin) Execute(ctx context.Context, pluginCtx *PluginContext, inpu
 	}
 
 	// Read output from memory
-	outputPtr := uint32(results[0])
-	outputSize := uint32(results[1])
+	if results[0] > math.MaxUint32 || results[1] > math.MaxUint32 {
+		return nil, fmt.Errorf("plugin returned an out-of-range output pointer or size")
+	}
+	outputPtr := uint32(results[0])  //nolint:gosec // bounded above
+	outputSize := uint32(results[1]) //nolint:gosec // bounded above
 
 	outputJSON, ok := mem.Read(outputPtr, outputSize)
 	if !ok {

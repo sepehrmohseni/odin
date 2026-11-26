@@ -134,7 +134,7 @@ func (pm *PluginManager) createPluginWrapper(sym interface{}) Plugin {
 	v := reflect.ValueOf(sym)
 
 	// If it's a pointer to a pointer, dereference it
-	for v.Kind() == reflect.Ptr && !v.IsNil() {
+	for v.Kind() == reflect.Pointer && !v.IsNil() {
 		v = v.Elem()
 	}
 
@@ -218,54 +218,36 @@ func (w *pluginWrapper) Version() string {
 func (w *pluginWrapper) Initialize(config map[string]interface{}) error {
 	args := []reflect.Value{reflect.ValueOf(config)}
 	result := w.value.MethodByName("Initialize").Call(args)
-	if !result[0].IsNil() {
-		return result[0].Interface().(error)
-	}
-	return nil
+	return resultError(result)
 }
 
 func (w *pluginWrapper) PreRequest(ctx context.Context, pluginCtx *PluginContext) error {
 	args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(pluginCtx)}
 	result := w.value.MethodByName("PreRequest").Call(args)
-	if !result[0].IsNil() {
-		return result[0].Interface().(error)
-	}
-	return nil
+	return resultError(result)
 }
 
 func (w *pluginWrapper) PostRequest(ctx context.Context, pluginCtx *PluginContext) error {
 	args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(pluginCtx)}
 	result := w.value.MethodByName("PostRequest").Call(args)
-	if !result[0].IsNil() {
-		return result[0].Interface().(error)
-	}
-	return nil
+	return resultError(result)
 }
 
 func (w *pluginWrapper) PreResponse(ctx context.Context, pluginCtx *PluginContext) error {
 	args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(pluginCtx)}
 	result := w.value.MethodByName("PreResponse").Call(args)
-	if !result[0].IsNil() {
-		return result[0].Interface().(error)
-	}
-	return nil
+	return resultError(result)
 }
 
 func (w *pluginWrapper) PostResponse(ctx context.Context, pluginCtx *PluginContext) error {
 	args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(pluginCtx)}
 	result := w.value.MethodByName("PostResponse").Call(args)
-	if !result[0].IsNil() {
-		return result[0].Interface().(error)
-	}
-	return nil
+	return resultError(result)
 }
 
 func (w *pluginWrapper) Cleanup() error {
 	result := w.value.MethodByName("Cleanup").Call(nil)
-	if !result[0].IsNil() {
-		return result[0].Interface().(error)
-	}
-	return nil
+	return resultError(result)
 }
 
 // LoadPlugin loads a plugin from a file
@@ -599,4 +581,15 @@ func (pm *PluginManager) GetRollback() *MiddlewareRollback {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	return pm.rollback
+}
+
+// resultError converts the single return value of a reflected `error`-returning call.
+func resultError(result []reflect.Value) error {
+	if len(result) == 0 || result[0].IsNil() {
+		return nil
+	}
+	if err, ok := result[0].Interface().(error); ok {
+		return err
+	}
+	return fmt.Errorf("plugin method returned %T, want error", result[0].Interface())
 }

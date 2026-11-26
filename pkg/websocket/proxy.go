@@ -87,7 +87,7 @@ func (p *Proxy) ProxyWebSocket(c echo.Context, targetURL string) error {
 
 	target, err := url.Parse(targetURL)
 	if err != nil {
-		clientConn.Close()
+		_ = clientConn.Close()
 		return err
 	}
 
@@ -108,7 +108,7 @@ func (p *Proxy) ProxyWebSocket(c echo.Context, targetURL string) error {
 	serverConn, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
 		p.logger.WithError(err).WithField("target", wsURL).Error("Failed to connect to target WebSocket")
-		clientConn.Close()
+		_ = clientConn.Close()
 		return err
 	}
 
@@ -227,7 +227,10 @@ func (c *Connection) close() {
 }
 
 func (p *Proxy) HandleWebSocketUpgrade(c echo.Context) error {
-	targetURL := c.Get("target_url").(string)
+	targetURL, ok := c.Get("target_url").(string)
+	if !ok || targetURL == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "No target URL specified for WebSocket")
+	}
 	return p.ProxyWebSocket(c, targetURL)
 }
 
@@ -235,11 +238,11 @@ func WebSocketMiddleware(proxy *Proxy) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if isWebSocketUpgrade(c.Request()) {
-				targetURL := c.Get("target_url")
-				if targetURL == nil {
+				targetURL, ok := c.Get("target_url").(string)
+				if !ok || targetURL == "" {
 					return echo.NewHTTPError(http.StatusBadRequest, "No target URL specified for WebSocket")
 				}
-				return proxy.ProxyWebSocket(c, targetURL.(string))
+				return proxy.ProxyWebSocket(c, targetURL)
 			}
 			return next(c)
 		}

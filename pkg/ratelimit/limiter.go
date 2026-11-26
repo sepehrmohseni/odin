@@ -2,7 +2,7 @@ package ratelimit
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"net"
 	"net/http"
@@ -290,7 +290,7 @@ func (l *Limiter) generateKey(c echo.Context, rule *Rule) string {
 	}
 
 	key := strings.Join(keyParts, ":")
-	hash := md5.Sum([]byte(key))
+	hash := sha256.Sum256([]byte(key))
 	return fmt.Sprintf("ratelimit:%x", hash)
 }
 

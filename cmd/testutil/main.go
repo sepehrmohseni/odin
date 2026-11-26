@@ -41,9 +41,8 @@ func main() {
 		fmt.Printf("Error making request: %v\n", err)
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
-
 	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
 	if err != nil {
 		fmt.Printf("Error reading response: %v\n", err)
 		os.Exit(1)

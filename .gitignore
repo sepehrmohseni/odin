@@ -11,7 +11,9 @@
 *.dll
 *.so
 *.dylib
-odin
+# The gateway binary when built at the repository root. Anchored, because a bare `odin` would
+# also ignore cmd/odin/ and deployments/helm/odin/.
+/odin
 # Test binary, built with `go test -c`
 *.test
 
@@ -69,9 +71,8 @@ pids
 *.seed
 *.pid.lock
 
-# Coverage reports (keep these for CI)
-# coverage.out should be tracked for CI
-# coverage.html can be generated locally
+# Coverage reports
+coverage.html
 
 # Docker
 docker-compose.override.yml

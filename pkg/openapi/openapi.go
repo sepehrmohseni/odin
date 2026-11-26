@@ -3,8 +3,10 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"odin/pkg/service"
 )
@@ -393,8 +395,10 @@ func toCamelCase(s string) string {
 	s = strings.ReplaceAll(s, "-", " ")
 	s = strings.ReplaceAll(s, "_", " ")
 	words := strings.Fields(s)
-	for i := range words {
-		words[i] = strings.Title(strings.ToLower(words[i]))
+	for i, w := range words {
+		r := []rune(strings.ToLower(w))
+		r[0] = unicode.ToUpper(r[0])
+		words[i] = string(r)
 	}
 	return strings.Join(words, "")
 }
@@ -409,7 +413,6 @@ func NewImporter() *Importer {
 
 // Import imports an OpenAPI specification and converts it to service configurations
 func (i *Importer) Import(spec *Spec) ([]*service.Config, error) {
-	var services []*service.Config
 	serviceMap := make(map[string]*service.Config)
 
 	// Group paths by tag (service)
@@ -434,24 +437,29 @@ func (i *Importer) Import(spec *Spec) ([]*service.Config, error) {
 				serviceName = op.Tags[0]
 			}
 
-			// Get or create service config
-			svc, exists := serviceMap[serviceName]
-			if !exists {
+			// Create the service config on first sight
+			if _, exists := serviceMap[serviceName]; !exists {
 				basePath := extractBasePath(path)
-				svc = &service.Config{
+				serviceMap[serviceName] = &service.Config{
 					Name:           serviceName,
 					BasePath:       basePath,
 					Targets:        []string{},
 					Timeout:        30 * time.Second,
 					Authentication: len(op.Security) > 0,
 				}
-				serviceMap[serviceName] = svc
 			}
 		}
 	}
 
-	// Convert map to slice
-	for _, svc := range serviceMap {
+	// Convert map to slice, in name order so the result is stable
+	names := make([]string, 0, len(serviceMap))
+	for name := range serviceMap {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	services := make([]*service.Config, 0, len(serviceMap))
+	for _, name := range names {
+		svc := serviceMap[name]
 		// Extract base URL from servers if available
 		if len(spec.Servers) > 0 {
 			svc.Targets = []string{spec.Servers[0].URL}

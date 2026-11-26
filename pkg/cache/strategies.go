@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -103,7 +103,7 @@ func (sm *StrategyManager) GenerateKey(req *http.Request, userContext string) st
 	}
 
 	key := strings.Join(keyParts, ":")
-	hash := md5.Sum([]byte(key))
+	hash := sha256.Sum256([]byte(key))
 	return fmt.Sprintf("cache:%x", hash)
 }
 

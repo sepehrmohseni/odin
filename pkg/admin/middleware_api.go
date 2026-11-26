@@ -519,8 +519,8 @@ func (h *MiddlewareAPIHandler) reloadAllMiddleware(c echo.Context) error {
 
 	for _, plugin := range plugins {
 		// Unload if already loaded
-		h.manager.UnregisterMiddleware(plugin.Name)
-		h.manager.UnloadMiddleware(plugin.Name)
+		_ = h.manager.UnregisterMiddleware(plugin.Name) // may not be registered yet
+		_ = h.manager.UnloadMiddleware(plugin.Name)
 
 		// Load and register
 		err := h.manager.LoadMiddlewareWithChain(
@@ -590,7 +590,7 @@ func (h *MiddlewareAPIHandler) disableAllMiddleware(c echo.Context) error {
 				c.Logger().Errorf("Failed to disable %s: %v", plugin.Name, err)
 			} else {
 				// Unregister from chain
-				h.manager.UnregisterMiddleware(plugin.Name)
+				_ = h.manager.UnregisterMiddleware(plugin.Name)
 				disabledCount++
 			}
 		}

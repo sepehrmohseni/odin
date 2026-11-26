@@ -79,8 +79,9 @@ func (r *Router) RegisterHealthRoutes() {
 	})
 
 	r.echo.GET("/routes", func(c echo.Context) error {
-		var routes []map[string]string
-		for _, route := range r.echo.Routes() {
+		all := r.echo.Routes()
+		routes := make([]map[string]string, 0, len(all))
+		for _, route := range all {
 			routes = append(routes, map[string]string{
 				"method": route.Method,
 				"path":   route.Path,

@@ -14,12 +14,18 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// run does the migration and returns the exit status, so deferred cleanup (closing the MongoDB
+// connection) runs before the process exits.
+func run() int {
 	var (
 		configFile    = flag.String("config", "config/config.yaml", "Path to configuration file")
 		servicesFile  = flag.String("services", "", "Path to services YAML file (optional)")
 		routesFile    = flag.String("routes", "", "Path to routes YAML file (optional)")
 		mongoURI      = flag.String("mongodb-uri", "", "MongoDB connection URI (overrides config)")
-		mongoDatabase = flag.String("mongodb-database", "odin_gateway", "MongoDB database name")
+		mongoDatabase = flag.String("mongodb-database", "", "MongoDB database name (overrides config)")
 		dryRun        = flag.Bool("dry-run", false, "Perform dry run without actual migration")
 		force         = flag.Bool("force", false, "Force migration even if services exist")
 		verbose       = flag.Bool("verbose", false, "Enable verbose logging")
@@ -112,12 +118,14 @@ func main() {
 	ctx := context.Background()
 	existingServices, err := repo.ListServices(ctx, nil)
 	if err != nil {
-		logger.WithError(err).Fatal("Failed to list existing services")
+		logger.WithError(err).Error("Failed to list existing services")
+		return 1
 	}
 
 	if len(existingServices) > 0 && !*force {
-		logger.WithField("count", len(existingServices)).Fatal(
+		logger.WithField("count", len(existingServices)).Error(
 			"Services already exist in MongoDB. Use --force to overwrite")
+		return 1
 	}
 
 	if len(existingServices) > 0 {
@@ -137,7 +145,8 @@ func main() {
 	if *servicesFile != "" {
 		services, err := loadServicesFromYAML(*servicesFile, logger)
 		if err != nil {
-			logger.WithError(err).Fatal("Failed to load services file")
+			logger.WithError(err).Error("Failed to load services file")
+			return 1
 		}
 		logger.WithField("count", len(services)).Info("Loaded services from services file")
 		allServices = append(allServices, services...)
@@ -147,14 +156,16 @@ func main() {
 	if *routesFile != "" {
 		routes, err := loadServicesFromYAML(*routesFile, logger)
 		if err != nil {
-			logger.WithError(err).Fatal("Failed to load routes file")
+			logger.WithError(err).Error("Failed to load routes file")
+			return 1
 		}
 		logger.WithField("count", len(routes)).Info("Loaded services from routes file")
 		allServices = append(allServices, routes...)
 	}
 
 	if len(allServices) == 0 {
-		logger.Fatal("No services found to migrate")
+		logger.Error("No services found to migrate")
+		return 1
 	}
 
 	// Remove duplicates by name
@@ -189,7 +200,7 @@ func main() {
 			}).Info("Service")
 		}
 		logger.Info("Migration would complete successfully (dry run)")
-		return
+		return 0
 	}
 
 	// Perform actual migration
@@ -234,7 +245,7 @@ func main() {
 		for _, err := range errors {
 			logger.Error(err.Error())
 		}
-		os.Exit(1)
+		return 1
 	}
 
 	// Verify migration
@@ -242,7 +253,7 @@ func main() {
 	verifiedServices, err := repo.ListServices(ctx, nil)
 	if err != nil {
 		logger.WithError(err).Error("Failed to verify migration")
-		os.Exit(1)
+		return 1
 	}
 
 	logger.WithField("count", len(verifiedServices)).Info("Services in MongoDB after migration")
@@ -270,6 +281,7 @@ func main() {
 
 	logger.Info("✅ Migration completed successfully!")
 	logger.Info("You can now enable MongoDB in your configuration and restart Odin")
+	return 0
 }
 
 func loadServicesFromYAML(path string, logger *logrus.Logger) ([]config.ServiceConfig, error) {

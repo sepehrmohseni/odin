@@ -7,6 +7,7 @@ import (
 	"odin/pkg/config"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -411,7 +412,7 @@ func (h *SettingsHandler) saveConfig() error {
 	}
 
 	// Write new config
-	if err := os.WriteFile(h.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(h.configPath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
@@ -427,12 +428,12 @@ func (h *SettingsHandler) createBackup(backupPath string) error {
 
 	// Ensure backup directory exists
 	backupDir := filepath.Join(filepath.Dir(h.configPath), "backups")
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		return err
 	}
 
 	backupFile := filepath.Join(backupDir, filepath.Base(backupPath))
-	return os.WriteFile(backupFile, data, 0644)
+	return os.WriteFile(backupFile, data, 0o600) //nolint:gosec // name reduced to its base inside the backups dir
 }
 
 // GetConfigBackups lists available configuration backups
@@ -471,6 +472,10 @@ func (h *SettingsHandler) GetConfigBackups(c echo.Context) error {
 // RestoreConfigBackup restores a configuration backup
 func (h *SettingsHandler) RestoreConfigBackup(c echo.Context) error {
 	backupName := c.Param("name")
+	// Only a plain file name inside the backups directory: no separators, no "..".
+	if backupName == "" || backupName != filepath.Base(backupName) || strings.HasPrefix(backupName, ".") {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid backup name"})
+	}
 
 	backupPath := filepath.Join(filepath.Dir(h.configPath), "backups", backupName)
 
@@ -492,7 +497,7 @@ func (h *SettingsHandler) RestoreConfigBackup(c echo.Context) error {
 	}
 
 	// Restore backup
-	if err := os.WriteFile(h.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(h.configPath, data, 0o600); err != nil { //nolint:gosec // configPath is the gateway's own config file
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to restore backup"})
 	}
 

@@ -22,7 +22,8 @@ type clusterManager struct {
 	clusters    map[string]*ClusterInfo
 	services    map[string]*ServiceLocation
 	httpClient  *http.Client
-	affinityMap map[string]string // sessionID -> clusterName
+	clients     map[string]*http.Client // per-cluster clients carrying that cluster's TLS settings
+	affinityMap map[string]string       // sessionID -> clusterName
 	mu          sync.RWMutex
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -49,6 +50,7 @@ func NewManager(config *Config, logger *logrus.Logger) (Manager, error) {
 		clusters:    make(map[string]*ClusterInfo),
 		services:    make(map[string]*ServiceLocation),
 		httpClient:  httpClient,
+		clients:     make(map[string]*http.Client),
 		affinityMap: make(map[string]string),
 		ctx:         ctx,
 		cancel:      cancel,
@@ -72,13 +74,12 @@ func NewManager(config *Config, logger *logrus.Logger) (Manager, error) {
 		}
 
 		// Create HTTP client for this cluster
+		// (Previously this client was assigned to a local variable and dropped, so CA and mTLS
+		// settings were never used.)
 		if tlsConfig != nil {
-			transport := &http.Transport{
-				TLSClientConfig: tlsConfig,
-			}
-			httpClient = &http.Client{
+			manager.clients[clusterCfg.Name] = &http.Client{
 				Timeout:   10 * time.Second,
-				Transport: transport,
+				Transport: &http.Transport{TLSClientConfig: tlsConfig},
 			}
 		}
 
@@ -105,7 +106,7 @@ func createTLSConfig(cfg *TLSConfig) (*tls.Config, error) {
 	}
 
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: cfg.Insecure,
+		InsecureSkipVerify: cfg.Insecure, //nolint:gosec // explicit per-cluster opt-in (tls.insecure)
 	}
 
 	// Load client certificate if provided
@@ -218,7 +219,7 @@ func (m *clusterManager) checkClusterHealth(cfg *ClusterConfig) {
 		req.SetBasicAuth(cfg.Auth.Username, cfg.Auth.Password)
 	}
 
-	resp, err := m.httpClient.Do(req)
+	resp, err := m.clientFor(cfg.Name).Do(req)
 	if err != nil {
 		m.markClusterUnhealthy(cfg.Name, err)
 		return
@@ -285,7 +286,9 @@ func (m *clusterManager) serviceSyncLoop() {
 	defer ticker.Stop()
 
 	// Initial sync
-	m.SyncServices()
+	if err := m.SyncServices(); err != nil {
+		m.logger.WithError(err).Warn("Initial multi-cluster service sync failed")
+	}
 
 	for {
 		select {
@@ -368,7 +371,7 @@ func (m *clusterManager) fetchClusterServices(clusterName string) ([]string, err
 		req.Header.Set("Authorization", "Bearer "+cfg.Auth.Token)
 	}
 
-	resp, err := m.httpClient.Do(req)
+	resp, err := m.clientFor(clusterName).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -478,9 +481,8 @@ func (m *clusterManager) RouteRequest(req *RouteRequest) (*RouteDecision, error)
 		selectedCluster = m.selectWeightedCluster(healthyClusters)
 	case "latency":
 		selectedCluster = m.selectLowestLatencyCluster(healthyClusters)
-	case "round-robin":
-		fallthrough
-	default:
+	default: // "round-robin"
+
 		selectedCluster = m.selectRoundRobinCluster(healthyClusters)
 	}
 
@@ -521,7 +523,7 @@ func (m *clusterManager) selectRoundRobinCluster(clusters []*ClusterInfo) *Clust
 	if len(clusters) == 0 {
 		return nil
 	}
-	return clusters[rand.Intn(len(clusters))]
+	return clusters[rand.Intn(len(clusters))] //nolint:gosec // load balancing, not security
 }
 
 // selectWeightedCluster selects a cluster using weighted load balancing
@@ -554,7 +556,7 @@ func (m *clusterManager) selectWeightedCluster(clusters []*ClusterInfo) *Cluster
 		return clusters[0]
 	}
 
-	selection := rand.Intn(totalWeight)
+	selection := rand.Intn(totalWeight) //nolint:gosec // load balancing, not security
 	cumulative := 0
 
 	for _, cluster := range clusters {
@@ -612,4 +614,13 @@ func (n *noopManager) Start() error {
 
 func (n *noopManager) Stop() error {
 	return nil
+}
+
+// clientFor returns the HTTP client for a cluster: its own when it has TLS settings, otherwise
+// the shared one.
+func (m *clusterManager) clientFor(clusterName string) *http.Client {
+	if c, ok := m.clients[clusterName]; ok {
+		return c
+	}
+	return m.httpClient
 }

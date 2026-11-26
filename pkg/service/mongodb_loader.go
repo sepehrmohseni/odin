@@ -26,8 +26,7 @@ type MongoDBLoader struct {
 
 // FileLoader loads services from YAML files
 type FileLoader struct {
-	configPath string
-	logger     *logrus.Logger
+	logger *logrus.Logger
 }
 
 // NewLoader creates appropriate loader based on configuration

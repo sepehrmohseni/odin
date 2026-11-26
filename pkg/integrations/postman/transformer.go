@@ -361,11 +361,9 @@ func (t *Transformer) extractRoutes(items []CollectionItem, routes *[]RouteMappi
 			*routes = append(*routes, mapping)
 		} else if len(item.Item) > 0 {
 			// This is a folder, recurse
-			folderPrefix := prefix
+			folderPrefix := item.Name
 			if prefix != "" {
 				folderPrefix = prefix + " / " + item.Name
-			} else {
-				folderPrefix = item.Name
 			}
 			t.extractRoutes(item.Item, routes, folderPrefix)
 		}

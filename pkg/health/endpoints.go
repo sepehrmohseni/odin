@@ -98,8 +98,9 @@ func Register(e *echo.Echo, logger *logrus.Logger) {
 	})
 
 	e.GET("/debug/routes", func(c echo.Context) error {
-		var routes []map[string]interface{}
-		for _, route := range e.Routes() {
+		all := e.Routes()
+		routes := make([]map[string]interface{}, 0, len(all))
+		for _, route := range all {
 			routes = append(routes, map[string]interface{}{
 				"method": route.Method,
 				"path":   route.Path,

@@ -165,7 +165,9 @@ func (h *PluginHandler) updatePlugin(c echo.Context) error {
 
 	// Reload if currently loaded
 	if _, loaded := h.manager.GetPlugin(name); loaded {
-		h.manager.UnloadPlugin(name)
+		if err := h.manager.UnloadPlugin(name); err != nil {
+			c.Logger().Warnf("Failed to unload plugin %s before reload: %v", name, err)
+		}
 		if plugin.Enabled {
 			if err := h.manager.LoadPlugin(plugin.Name, plugin.BinaryPath, plugin.Config, plugin.Hooks); err != nil {
 				c.Logger().Errorf("Failed to reload plugin %s: %v", plugin.Name, err)

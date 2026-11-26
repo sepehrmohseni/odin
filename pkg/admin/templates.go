@@ -24,7 +24,7 @@ var templateDir = "pkg/admin/templates"
 func (h *AdminHandler) initTemplates() {
 	if _, err := os.Stat(templateDir); os.IsNotExist(err) {
 		h.logger.Info("Creating templates directory")
-		if err := os.MkdirAll(templateDir, 0755); err != nil {
+		if err := os.MkdirAll(templateDir, 0o750); err != nil {
 			h.logger.WithError(err).Fatal("Failed to create templates directory")
 		}
 
@@ -39,7 +39,7 @@ func (h *AdminHandler) createTemplateFile(name, content string) {
 	path := filepath.Join(templateDir, name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		h.logger.Infof("Creating template: %s", name)
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			h.logger.WithError(err).Fatalf("Failed to create template: %s", name)
 		}
 	}

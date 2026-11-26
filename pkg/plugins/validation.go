@@ -32,7 +32,7 @@ func (pv *PluginValidator) ValidatePlugin(pluginPath, expectedName string) error
 
 	// 2. Validate Go version compatibility
 	if err := pv.validateGoVersion(pluginPath); err != nil {
-		return fmt.Errorf("Go version mismatch: %w", err)
+		return fmt.Errorf("go version mismatch: %w", err)
 	}
 
 	// 3. Validate plugin can be loaded (test load)

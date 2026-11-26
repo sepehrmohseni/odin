@@ -229,20 +229,19 @@ func (r *MongoDBRepository) GetLastSync(ctx context.Context, collectionID string
 
 // UpdateSyncStatus updates the status of a sync record
 func (r *MongoDBRepository) UpdateSyncStatus(ctx context.Context, id string, status SyncStatus, syncErr error) error {
-	update := bson.M{
-		"$set": bson.M{
-			"status": status,
-		},
+	set := bson.M{
+		"status": status,
 	}
 
 	if syncErr != nil {
-		update["$set"].(bson.M)["error"] = syncErr.Error()
+		set["error"] = syncErr.Error()
 	}
 
 	if status == SyncStatusCompleted || status == SyncStatusFailed {
-		now := time.Now()
-		update["$set"].(bson.M)["completed_at"] = now
+		set["completed_at"] = time.Now()
 	}
+
+	update := bson.M{"$set": set}
 
 	_, err := r.syncCollection.UpdateOne(ctx, bson.M{"_id": id}, update)
 	if err != nil {

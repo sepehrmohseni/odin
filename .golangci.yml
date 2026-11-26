@@ -1,54 +1,64 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
   modules-download-mode: readonly
 
 linters:
+  # errcheck, govet, ineffassign, staticcheck (which now includes gosimple) and unused.
+  default: standard
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
-    - gofmt
-    - goimports
-    - misspell
     - gocritic
     - gosec
-    - unconvert
+    - misspell
     - prealloc
+    - unconvert
+  settings:
+    errcheck:
+      check-type-assertions: true
+    gosec:
+      excludes:
+        - G204 # Subprocess launched with variable
+        - G304 # File path provided as taint input
+        - G704 # SSRF via taint analysis: forwarding requests to configured URLs is the gateway's job
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - unnamedResult
+        - hugeParam
+        - rangeValCopy
+        - httpNoBody
+        - importShadow
+        - octalLiteral
+        - paramTypeCombine
+        - ifElseChain
+        - appendCombine
+        - nestingReduce
+        - emptyStringTest
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: ^test/
+        linters:
+          - gosec
+          - errcheck
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-  gosec:
-    excludes:
-      - G204 # Subprocess launched with variable
-      - G304 # File path provided as taint input
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - unnamedResult
-      - hugeParam
+formatters:
+  enable:
+    - gofmt
+    - goimports
 
 issues:
-  exclude-rules:
-    - path: test
-      linters:
-        - gosec
-        - errcheck
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
-
   max-issues-per-linter: 0
   max-same-issues: 0

@@ -39,8 +39,8 @@ func loadAdminCredentials(logger *logrus.Logger) (*AdminCredentials, error) {
 	var loaded bool
 
 	for _, path := range credsPaths {
-		if _, err := os.Stat(path); err == nil {
-			data, err := os.ReadFile(path)
+		if _, err := os.Stat(path); err == nil { //nolint:gosec // fixed list of well-known locations
+			data, err := os.ReadFile(path) //nolint:gosec // fixed list of well-known locations
 			if err != nil {
 				logger.WithError(err).Warnf("Failed to read admin credentials file: %s", path)
 				continue
@@ -135,7 +135,7 @@ func (h *AdminHandler) saveConfig() error {
 		return err
 	}
 
-	if err := os.WriteFile(h.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(h.configPath, data, 0o600); err != nil {
 		h.logger.WithError(err).Error("Failed to write configuration file")
 		return err
 	}

@@ -52,7 +52,7 @@ func (h *PluginHandler) uploadPlugin(c echo.Context) error {
 
 	// Create plugins directory if it doesn't exist
 	pluginsDir := "/var/odin/plugins"
-	if err := os.MkdirAll(pluginsDir, 0755); err != nil {
+	if err := os.MkdirAll(pluginsDir, 0o750); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to create plugins directory: %v", err),
 		})
@@ -90,7 +90,7 @@ func (h *PluginHandler) uploadPlugin(c echo.Context) error {
 	// Save to database
 	if err := h.repo.SavePlugin(context.Background(), &plugin); err != nil {
 		// Clean up uploaded file
-		os.Remove(binaryPath)
+		_ = os.Remove(binaryPath)
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to save plugin record: %v", err),
 		})
@@ -137,8 +137,8 @@ func (h *PluginHandler) buildPlugin(c echo.Context) error {
 	}
 
 	// Create build directory
-	buildDir := filepath.Join("/tmp", "odin-plugin-build", req.Name)
-	if err := os.MkdirAll(buildDir, 0755); err != nil {
+	buildDir := filepath.Join(os.TempDir(), "odin-plugin-build", req.Name)
+	if err := os.MkdirAll(buildDir, 0o750); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to create build directory: %v", err),
 		})
@@ -155,7 +155,7 @@ func (h *PluginHandler) buildPlugin(c echo.Context) error {
 
 	// Write source file
 	sourceFile := filepath.Join(buildDir, "plugin.go")
-	if err := os.WriteFile(sourceFile, []byte(sourceCode), 0644); err != nil {
+	if err := os.WriteFile(sourceFile, []byte(sourceCode), 0o600); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to write source file: %v", err),
 		})
@@ -172,7 +172,7 @@ require (
 )
 `, req.Name)
 
-	if err := os.WriteFile(filepath.Join(buildDir, "go.mod"), []byte(goModContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(buildDir, "go.mod"), []byte(goModContent), 0o600); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to write go.mod: %v", err),
 		})
@@ -180,7 +180,7 @@ require (
 
 	// Build plugin
 	pluginsDir := "/var/odin/plugins"
-	if err := os.MkdirAll(pluginsDir, 0755); err != nil {
+	if err := os.MkdirAll(pluginsDir, 0o750); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to create plugins directory: %v", err),
 		})
@@ -216,7 +216,7 @@ require (
 
 	// Save to database
 	if err := h.repo.SavePlugin(context.Background(), &plugin); err != nil {
-		os.Remove(outputPath)
+		_ = os.Remove(outputPath)
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to save plugin record: %v", err),
 		})
@@ -267,7 +267,7 @@ func (h *PluginHandler) testPlugin(c echo.Context) error {
 			"details": err.Error(),
 		})
 	}
-	defer tempManager.UnloadPlugin(plugin.Name)
+	defer func() { _ = tempManager.UnloadPlugin(plugin.Name) }()
 
 	// Create test plugin context
 	pluginCtx := &plugins.PluginContext{

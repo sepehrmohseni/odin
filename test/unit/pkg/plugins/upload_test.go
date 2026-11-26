@@ -17,12 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test fixtures
-const (
-	testMongoURI = "mongodb://localhost:27017"
-	testDBName   = "odin_test_plugins"
-)
-
 func createTestPluginFile(t *testing.T, name string) string {
 	tmpDir := t.TempDir()
 	pluginPath := filepath.Join(tmpDir, name)
@@ -32,7 +26,7 @@ func createTestPluginFile(t *testing.T, name string) string {
 	// Add padding to make it a reasonable size
 	data := make([]byte, 1024)
 	copy(data, elfHeader)
-	
+
 	err := os.WriteFile(pluginPath, data, 0644)
 	require.NoError(t, err)
 
@@ -108,7 +102,7 @@ func TestPluginUpload_InvalidExtension(t *testing.T) {
 func TestPluginUpload_FileTooLarge(t *testing.T) {
 	tmpDir := t.TempDir()
 	largePath := filepath.Join(tmpDir, "large.so")
-	
+
 	// Create 51MB file (exceeds 50MB limit)
 	largeData := make([]byte, 51*1024*1024)
 	err := os.WriteFile(largePath, largeData, 0644)
@@ -184,7 +178,7 @@ func TestPluginConfiguration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var result map[string]interface{}
 			err := json.Unmarshal([]byte(tt.config), &result)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -219,7 +213,7 @@ func TestPluginPriority(t *testing.T) {
 // TestPluginPhase tests execution phase validation
 func TestPluginPhase(t *testing.T) {
 	validPhases := []string{"pre-routing", "post-routing", "pre-response"}
-	
+
 	tests := []struct {
 		name  string
 		phase string
@@ -271,7 +265,7 @@ func TestPluginRoutes(t *testing.T) {
 // TestEchoContext tests Echo framework integration
 func TestEchoContext(t *testing.T) {
 	e := echo.New()
-	
+
 	req := httptest.NewRequest(http.MethodPost, "/upload", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -285,7 +279,7 @@ func TestEchoContext(t *testing.T) {
 func TestSHA256Calculation(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.so")
-	
+
 	testData := []byte("test data for hashing")
 	err := os.WriteFile(testFile, testData, 0644)
 	require.NoError(t, err)
@@ -305,7 +299,7 @@ func TestMultipartFormParsing(t *testing.T) {
 	writer.WriteField("name", "test-plugin")
 	writer.WriteField("version", "1.0.0")
 	writer.WriteField("description", "Test description")
-	
+
 	err := writer.Close()
 	require.NoError(t, err)
 
@@ -339,12 +333,12 @@ func BenchmarkMultipartFormCreation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
-		
+
 		file, _ := os.Open(tmpFile)
 		part, _ := writer.CreateFormFile("file", "test.so")
 		io.Copy(part, file)
 		file.Close()
-		
+
 		writer.WriteField("name", "test")
 		writer.WriteField("version", "1.0.0")
 		writer.Close()

@@ -85,7 +85,7 @@ func NewTargetChecker(config Config, logger *logrus.Logger, alerts *AlertManager
 			Timeout: config.Timeout,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: config.InsecureSkipVerify,
+					InsecureSkipVerify: config.InsecureSkipVerify, //nolint:gosec // explicit per-service opt-in (healthCheck.insecureSkipVerify)
 				},
 			},
 		},
