@@ -54,7 +54,6 @@ more.
 
 | Item | Finding | Effort |
 | --- | --- | --- |
-| Demo: retake the screenshots with the Anomalies page | — | S |
 | Release v0.2.0 (binaries, signed multi-arch image), then check it end to end | [OPS-07](docs/AUDIT.md#operations) | S |
 
 ### 2. OpenID Connect authentication

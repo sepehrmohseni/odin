@@ -41,8 +41,8 @@ which its health check reports.
 
 ### Dashboard
 
-Live totals, and every service with its route, upstream health, the policies the gateway
-applies and its traffic.
+Live totals, every service with its route, upstream health, the policies the gateway applies and
+its traffic, and the open anomalies.
 
 ![Odin admin dashboard with five services and live traffic](assets/demo/dashboard.jpg)
 
@@ -53,14 +53,20 @@ rates, and the state of every health-checked target.
 
 ![Odin monitoring page with a five-minute request chart and per-service traffic](assets/demo/monitoring.jpg)
 
+### Anomalies
+
+Odin learns each service's normal traffic, server error share and latency, and reports windows
+that fall far outside them. In the demo, the generator's swings and bursts show up as traffic
+spikes and drops.
+
+![Odin anomalies page with traffic spikes and drops per service](assets/demo/anomalies.jpg)
+
 ### Request log
 
 The last 100 requests, filterable by path, service, status and duration; each can be copied as
-a curl command.
+a curl command. The admin follows the system's light or dark setting:
 
-![Odin request log with 200, 401 and 429 responses](assets/demo/request-log.jpg)
-
-The admin follows the system's light or dark setting:
+![Odin request log with 200, 401 and 404 responses, in the dark theme](assets/demo/request-log.jpg)
 
 ![Odin admin dashboard in the dark theme](assets/demo/dashboard-dark.jpg)
 
