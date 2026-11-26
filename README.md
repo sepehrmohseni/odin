@@ -1,327 +1,153 @@
 <div align="center">
 
-# ⚡ Odin API Gateway
+# Odin API Gateway
 
-[![CI](https://github.com/sepehr-mohseni/odin/actions/workflows/ci.yml/badge.svg)](https://github.com/sepehr-mohseni/odin/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/sepehr-mohseni/odin/branch/main/graph/badge.svg)](https://codecov.io/gh/sepehr-mohseni/odin)
-[![Go Report Card](https://goreportcard.com/badge/github.com/sepehr-mohseni/odin)](https://goreportcard.com/report/github.com/sepehr-mohseni/odin)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://golang.org)
-[![GitHub stars](https://img.shields.io/github/stars/sepehr-mohseni/odin?style=social)](https://github.com/sepehr-mohseni/odin/stargazers)
+[![CI](https://github.com/sepehrmohseni/odin/actions/workflows/ci.yml/badge.svg)](https://github.com/sepehrmohseni/odin/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-_A lightning-fast, feature-rich API Gateway built with Go_
-
-[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
-
-[![Star this repository](https://img.shields.io/badge/⭐-Star%20this%20repository-yellow?style=for-the-badge&logo=github)](https://github.com/sepehr-mohseni/odin)
+An API gateway written in Go: routing, authentication, rate limiting, caching, resilience and
+observability for HTTP, WebSocket and GraphQL services, with a web admin interface.
 
 </div>
 
----
+## Quick start
 
-## 🚀 Features
-
-<table>
-<tr>
-<td width="50%">
-
-### 🔧 **Core Features**
-
-- **🔄 Load Balancing** - Round-robin, random, and weighted algorithms
-- **🔐 Authentication** - JWT and OAuth2 support with role-based access
-- **⚡ Rate Limiting** - Token bucket, sliding window, fixed window algorithms
-- **💾 Caching** - TTL, conditional, and user context strategies
-- **🛡️ Circuit Breaker** - Fault tolerance and automatic recovery
-- **🌐 WebSocket Proxying** - Full-duplex communication support
-
-</td>
-<td width="50%">
-
-### Advanced Features**
-
-- **🔗 Response Aggregation** - Combine multiple service responses
-- **⚙️ Admin Interface** - Web-based configuration management
-- **📈 Monitoring** - Prometheus metrics and health checks
-- **🔄 Request/Response Transformation** - JSONPath-based data mapping
-- **🏗️ Service Discovery** - Dynamic service registration
-- **📝 API Documentation** - Auto-generated OpenAPI specs
-- **🧩 Plugin System** - Extensible architecture with custom plugins
-- **📦 Plugin Upload** - Upload and manage Go plugins via admin panel
-- **📊 GraphQL Proxy** - Query validation, caching, and security
-- **⚡ gRPC Support** - HTTP-to-gRPC transcoding
-- **🗄️ MongoDB Integration** - Centralized storage for config and metrics
-- **🔌 WASM Extensions** - Lightweight, secure plugin runtime
-- **🌐 Multi-Cluster** - Global load balancing across clusters
-
-</td>
-</tr>
-</table>
-
-## 🏃 Quick Start
-
-### Prerequisites
-
-- Go 1.25 or higher
-- Redis (optional, for distributed rate limiting and caching)
-- MongoDB (optional, for persistent storage and metrics)
-
-### Installation
+With Docker (Compose v2):
 
 ```bash
-# Clone the repository
-git clone https://github.com/sepehr-mohseni/odin.git
-cd odin
-
-# Build the binary
-make build
-
-# Run with sample configuration
-make run
+git clone https://github.com/sepehrmohseni/odin.git && cd odin
+scripts/quickstart.sh
 ```
 
-### Docker Setup
+This creates `.env` with random secrets, starts Odin with Redis, MongoDB and four demo backends,
+waits until everything is healthy and prints the admin login. Then:
 
 ```bash
-# Build and run with Docker Compose
-docker-compose up -d
-
-# Or build just the gateway
-make docker
-docker run -p 8080:8080 -v ./config:/app/config odin-gateway:latest
+curl http://localhost:8080/api/products       # proxied to a demo backend
+curl -i http://localhost:8080/api/orders      # 401: needs a JWT
+open http://localhost:8080/admin              # admin interface (login printed by the script)
+scripts/quickstart.sh --down                  # stop
 ```
 
-## ⚙️ Configuration
+[docs/getting-started.md](docs/getting-started.md) covers this and the other ways to install
+(plain Docker image, binary, Helm), your first routes and the admin interface.
 
-Create a `config/config.yaml` file:
+## Features
 
-```yaml
-server:
-  port: 8080
-  timeout: 30s
+What Odin does today. Each item is covered by the end-to-end tests in
+[test/unit/pkg/gateway](test/unit/pkg/gateway):
 
-logging:
-  level: info
-  json: false
+- **Routing and load balancing**: path-prefix services, round-robin or random targets,
+  optional base-path stripping, per-service static headers, `X-Forwarded-*` headers.
+- **Resilience**: upstream timeouts, retries for idempotent requests with failover to another
+  target, active health checks that take unhealthy targets out of rotation, per-target circuit
+  breakers.
+- **Security**: JWT authentication per service (HMAC, expiry required, optional issuer and
+  audience), request body limits, client IPs trusted from configured proxies only.
+- **Traffic control**: rate limits per service and client (user or IP), in memory or shared
+  through Redis (fixed window, sliding window, token bucket); canary routing by header, cookie
+  or weight.
+- **Transformation**: Go-template rewriting of headers, query and bodies; JSON field mappings;
+  enrichment of responses with data from dependent services; `/aggregate`.
+- **Caching**: response cache in memory or Redis that respects authentication, cookies and
+  `Cache-Control`.
+- **Protocols**: HTTP/1.1, WebSocket and server-sent events (streamed), GraphQL with depth and
+  introspection limits.
+- **Observability**: Prometheus metrics per service, OpenTelemetry traces with context
+  propagation, structured access logs, `/health`, `/ready` and `/live`.
+- **Admin interface** (opt-in): dashboard, services, monitoring, traces and settings, behind
+  sessions with CSRF protection and login throttling; Go plugin upload with static validation;
+  Postman collection sync (with MongoDB).
 
-services:
-  - name: 'user-service'
-    basePath: '/api/users'
-    targets:
-      - 'http://localhost:3001'
-    authentication: true
-    loadBalancing: 'round-robin'
-    rateLimit:
-      limit: 100
-      window: '1m'
+Planned and known gaps (gRPC transcoding, OAuth2/OIDC, a request pipeline for uploaded plugins,
+live reload, more load-balancing algorithms and others) are listed in [ROADMAP.md](ROADMAP.md),
+and the findings behind them in [docs/AUDIT.md](docs/AUDIT.md).
 
-  - name: 'product-service'
-    basePath: '/api/products'
-    targets:
-      - 'http://localhost:3002'
-      - 'http://localhost:3003'
-    loadBalancing: 'weighted'
-    cache:
-      enabled: true
-      ttl: '5m'
-```
+## Configuration
 
-### Advanced Configuration
+Odin reads one YAML file (`-config`, default `config/config.yaml`) and, next to it, an optional
+`services.yaml`. Values written `${NAME}` or `${NAME:-default}` come from the environment.
+Start from [config/config.example.yaml](config/config.example.yaml) or
+[config/compose.yaml](config/compose.yaml); every option is described in
+[docs/configuration.md](docs/configuration.md).
 
-```yaml
-# Enable response aggregation
-services:
-  - name: 'user-profile'
-    basePath: '/api/profile'
-    targets:
-      - 'http://users-service:8080'
-    aggregation:
-      dependencies:
-        - service: 'user-preferences'
-          path: '/preferences/{user_id}'
-          parameterMapping:
-            - from: '$.user.id'
-              to: '{user_id}'
-        - service: 'user-activity'
-          path: '/activity/{user_id}/recent'
-```
+Environment variables used by the Docker setup ([.env.example](.env.example)):
 
-## 🛠️ Features in Detail
+| Variable | Used for | Default |
+| --- | --- | --- |
+| `ODIN_PORT` | Host port of the gateway (Compose) | `8080` |
+| `ODIN_JWT_SECRET` | Signing secret for services with `authentication: true` | required |
+| `ODIN_ADMIN_USERNAME` | Admin login | `admin` |
+| `ODIN_ADMIN_PASSWORD` | Admin password (or `admin.passwordHash`, bcrypt) | required in Compose; generated and logged otherwise |
+| `ODIN_ADMIN_ENABLED` | Turns the admin on with the image's built-in config | `false` |
+| `MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD` | MongoDB account (Compose) | `odin`, required |
+| `LOG_LEVEL` | `debug`, `info`, `warn` or `error` | `info` |
+| `GATEWAY_PORT` | Overrides `server.port` | from config |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana (`--profile observability`) | — |
 
-### Load Balancing
+## Development
 
-- **Round Robin**: Distributes requests evenly across all targets
-- **Random**: Randomly selects a target for each request
-- **Weighted**: Routes based on configured weights
-- **Health Checks**: Automatic failover for unhealthy targets
-
-### Authentication & Authorization
-
-- **JWT Authentication**: Stateless token-based auth with configurable claims
-- **OAuth2 Integration**: Support for major providers (Google, GitHub, etc.)
-- **Role-Based Access Control**: Fine-grained permissions per route
-- **API Key Management**: Simple API key authentication
-
-### Rate Limiting
-
-- **Multiple Algorithms**: Token bucket, sliding window, fixed window
-- **Per-User/IP/API Key**: Flexible rate limiting strategies
-- **Redis Backend**: Distributed rate limiting across multiple instances
-- **Custom Headers**: Include custom headers in rate limit calculations
-
-### Caching
-
-- **Multiple Strategies**: TTL-based, conditional (ETag/Last-Modified), user context
-- **Storage Backends**: In-memory, Redis, or custom implementations
-- **Cache Invalidation**: Tag-based and pattern-based invalidation
-- **Compression**: Automatic response compression
-
-## 📊 Monitoring & Observability
-
-### Prometheus Metrics
-
-- Request count, duration, and size distributions
-- Error rates and status code breakdowns
-- Rate limiting and cache hit/miss ratios
-- Circuit breaker state transitions
-- Active WebSocket connections
-
-### Health Checks
+Everything runs in Docker; no local Go toolchain is needed:
 
 ```bash
-# Gateway health
-curl http://localhost:8080/health
-
-# Readiness probe
-curl http://localhost:8080/ready
-
-# Metrics endpoint
-curl http://localhost:8080/metrics
+scripts/docker-check.sh            # what CI runs: mod verify, gofmt, vet, build, race tests,
+                                   # golangci-lint, govulncheck
+scripts/docker-check.sh test       # tests only;  ... lint, vuln, cover, shell, -- <command>
+scripts/docker-check.sh fix        # gofmt -w and go mod tidy (writes to the checkout)
+docker compose up -d --build --wait && docker compose down -v   # the dev stack
 ```
 
-### Admin Dashboard
+The check image ([docker/ci](docker/ci)) pins Go, golangci-lint and govulncheck and holds no
+project code, so other Go projects can use it too.
 
-Access the web-based admin interface at `http://localhost:8080/admin`
+With Go 1.26+ installed locally: `make build`, `make test`, `make lint`.
 
-- Real-time service monitoring
-- Configuration management
-- Route testing and debugging
-- Performance analytics
+## Project structure
 
-## 🔧 Development
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-
-# Run with coverage
-make test-coverage
-
-# Run specific test suites
-make test-unit
-make test-integration
-make test-oauth2
-make test-websocket
+```
+cmd/odin/            gateway entry point          cmd/migrate/   YAML -> MongoDB service import
+pkg/gateway/         wiring: builds the server, middleware and routes from the config
+pkg/routing/         per-service proxy handler (targets, retries, streaming, transforms)
+pkg/auth/ ratelimit/ circuit/ cache/ canary/ transform/ aggregator/ websocket/ graphql/
+pkg/health/ monitoring/ tracing/   health checks and alerts, Prometheus, OpenTelemetry
+pkg/admin/           admin web interface and API (templates/ and static/ are served from disk)
+pkg/plugins/         Go plugin loading, validation and upload
+pkg/config/          configuration schema and loading
+test/unit/           tests (test/unit/pkg/gateway drives the whole gateway)
+docker/ci/ scripts/  check image and wrappers;  deployments/  Docker, Kubernetes, Helm
 ```
 
-### Benchmarks
+Some packages are not wired into the gateway yet (WASM, multi-cluster, OpenAPI generation, AI
+traffic analysis); see [ROADMAP.md](ROADMAP.md).
 
-```bash
-# Run performance benchmarks
-make benchmark
+## Deployment
 
-# Load testing
-hey -n 10000 -c 100 http://localhost:8080/api/users
-```
+- Docker: [Dockerfile](Dockerfile) (multi-arch, non-root, health check),
+  [deployments/docker](deployments/docker)
+- Kubernetes: [Helm chart](deployments/helm/odin), [plain manifests](deployments/kubernetes)
+- Releases: tagging `vX.Y.Z` publishes binaries and a signed multi-arch image
+  ([release.yml](.github/workflows/release.yml))
 
-## 🚀 Deployment
+## Documentation
 
-### Kubernetes with Helm
+[Getting started](docs/getting-started.md) ·
+[Configuration](docs/configuration.md) ·
+[Authentication](docs/auth.md) ·
+[Canary deployments](docs/canary-deployments.md) ·
+[Transformations](docs/transformations.md) ·
+[Aggregation](docs/aggregation.md) ·
+[Monitoring](docs/monitoring.md) ·
+[Plugins](docs/plugin-development-guide.md) ·
+[Roadmap](ROADMAP.md) ·
+[Audit](docs/AUDIT.md) ·
+[Changelog](CHANGELOG.md)
 
-```bash
-# Package and install
-make helm-package
-make helm-install
+## Contributing
 
-# Or customize values
-helm install odin deployments/helm/odin \
-  --set ingress.enabled=true \
-  --set ingress.hostname=gateway.example.com \
-  --set auth.jwtSecret=your-secret-key
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md). Run `scripts/docker-check.sh` before opening a pull
+request; commits follow [Conventional Commits](https://www.conventionalcommits.org/).
 
-### Docker Compose
+## License
 
-```bash
-# Development environment
-make docker-compose-dev
-
-# Production environment
-make docker-compose
-```
-
-## 📖 Documentation
-
-### User Documentation
-- [📋 Configuration Guide](docs/configuration.md) - Complete configuration reference
-- [🔌 API Reference](docs/api.md) - REST API documentation
-- [🚀 Deployment Guide](docs/deployment.md) - Production deployment strategies
-- [🧩 Plugin Development Guide](docs/plugin-development-guide.md) - Complete guide to building and deploying plugins
-- [📦 Plugin Upload User Guide](docs/GOAL-7-USER-GUIDE.md) - **Upload and manage plugins via admin panel**
-- [📊 Monitoring Setup](docs/monitoring.md) - Observability and alerting
-- [🔒 Security Guide](docs/security.md) - Security best practices
-- [🧠 AI Traffic Analysis](docs/ai-analysis.md) - AI-powered anomaly detection
-
-### Technical Documentation
-- [🗺️ Goal #7 Summary](docs/GOAL-7-SUMMARY.md) - **Plugin upload system implementation** (3,200+ lines, 90% complete)
-- [📋 Goal #7 Plan](docs/GOAL-7-PLAN.md) - Plugin upload architecture and design
-- [🧪 Test Results](test/unit/pkg/plugins/) - 30 comprehensive tests, 100% pass rate
-
-### Project Planning
-- [🗺️ Roadmap](ROADMAP.md) - Current and planned features
-- [📋 Implementation Plan](docs/IMPLEMENTATION_PLAN.md) - Detailed 7-month plan (50+ pages)
-- [✅ Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST.md) - Progress tracking
-- [📊 Visual Roadmap](docs/VISUAL_ROADMAP.md) - Timeline and milestones
-- [📄 Executive Summary](docs/EXECUTIVE_SUMMARY.md) - High-level overview for stakeholders
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Quick Start for Contributors
-
-```bash
-# Fork and clone the repository
-git clone https://github.com/sepehr-mohseni/odin.git
-
-# Install development tools
-make install-tools
-
-# Run tests and linting
-make test lint
-
-# Submit a pull request
-```
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built with [Echo](https://echo.labstack.com/) web framework
-- Monitoring powered by [Prometheus](https://prometheus.io/)
-- WebSocket support via [Gorilla WebSocket](https://github.com/gorilla/websocket)
-
----
-
-<div align="center">
-
-**[⭐ Star this repository](https://github.com/sepehr-mohseni/odin/stargazers)** if you find it useful!
-
-[![Stargazers repo roster for @sepehr-mohseni/odin](https://reporoster.com/stars/sepehr-mohseni/odin)](https://github.com/sepehr-mohseni/odin/stargazers)
-
-Made with ❤️ by [Sepehr Mohseni](https://github.com/sepehr-mohseni)
-
-</div>
+[MIT](LICENSE)

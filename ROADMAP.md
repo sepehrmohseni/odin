@@ -24,19 +24,19 @@ Critical and high items that are contained enough to finish in the current harde
       COR-14, COR-18)
 - [x] Toolchain and dependencies current, lint and vulnerability checks in CI and in Docker
       ([SEC-23](docs/AUDIT.md#security), MNT-01, MNT-02, TST-01)
-- [ ] Production Docker image, Compose dev stack with `.env.example`, no credentials in shipped
+- [x] Production Docker image, Compose dev stack with `.env.example`, no credentials in shipped
       defaults ([OPS-05](docs/AUDIT.md#operations), OPS-08, SEC-25)
-- [ ] Helm chart that renders, matches the config schema and keeps secrets in Secrets
+- [x] Helm chart that renders, matches the config schema and keeps secrets in Secrets
       ([OPS-06](docs/AUDIT.md#operations))
-- [ ] Release workflow that can publish multi-arch images and binaries
+- [x] Release workflow that can publish multi-arch images and binaries
       ([OPS-07](docs/AUDIT.md#operations)) — the first tag and public image wait for the owner
 - [x] Admin pages render their own content; plugin pages render at all
       ([COR-11](docs/AUDIT.md#correctness))
 - [x] "Export to Postman" exports the configured service, or refuses, instead of overwriting a collection with a placeholder
       ([COR-15](docs/AUDIT.md#correctness))
-- [ ] First-run setup: one-command quickstart script and a setup guide (Docker, Compose, binary,
+- [x] First-run setup: one-command quickstart script and a setup guide (Docker, Compose, binary,
       Helm) that ends at the admin login
-- [ ] README and docs describe only what works; broken links fixed
+- [x] README and docs describe only what works; broken links fixed
       ([DOC-01](docs/AUDIT.md#documentation)..DOC-04)
 
 ## Next
