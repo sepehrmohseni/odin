@@ -121,7 +121,7 @@ type MonitoringCollector struct {
 	activeConns    int
 	traces         []TraceInfo
 	services       map[string]ServiceStatus
-	wsClients      map[*websocket.Conn]bool
+	wsClients      map[*wsClient]bool
 	wsClientsMutex sync.RWMutex
 
 	seconds      [timelineSeconds]secondBucket
@@ -138,7 +138,7 @@ func NewMonitoringCollector() *MonitoringCollector {
 		statusCodes:   make(map[int]int),
 		traces:        make([]TraceInfo, 0),
 		services:      make(map[string]ServiceStatus),
-		wsClients:     make(map[*websocket.Conn]bool),
+		wsClients:     make(map[*wsClient]bool),
 		perService:    make(map[string]*serviceCounters),
 		startedAt:     time.Now(),
 		now:           time.Now,
@@ -471,27 +471,44 @@ func (mc *MonitoringCollector) BroadcastMetrics() {
 		log.Printf("Error marshaling metrics: %v", err)
 		return
 	}
-
-	// Write under the read lock, but delete dead clients under the write lock: deleting from
-	// the map while only holding RLock is a concurrent map write.
-	var dead []*websocket.Conn
 	mc.wsClientsMutex.RLock()
+	defer mc.wsClientsMutex.RUnlock()
 	for client := range mc.wsClients {
-		if err := client.WriteMessage(websocket.TextMessage, data); err != nil {
-			log.Printf("Error writing to websocket: %v", err)
-			dead = append(dead, client)
-		}
+		client.offer(data)
 	}
-	mc.wsClientsMutex.RUnlock()
+}
 
-	if len(dead) > 0 {
-		mc.wsClientsMutex.Lock()
-		for _, client := range dead {
-			_ = client.Close()
-			delete(mc.wsClients, client)
-		}
-		mc.wsClientsMutex.Unlock()
+// wsClient is one monitoring WebSocket. Only its writer goroutine writes to the connection
+// (gorilla/websocket allows one writer at a time; the first snapshot and a broadcast used to
+// race), and a broadcast never waits for it: a client too slow to keep up misses an update
+// instead of holding up every other client.
+type wsClient struct {
+	conn *websocket.Conn
+	send chan []byte
+}
+
+func newWSClient(conn *websocket.Conn) *wsClient {
+	c := &wsClient{conn: conn, send: make(chan []byte, 4)}
+	go c.writeLoop()
+	return c
+}
+
+func (c *wsClient) offer(data []byte) {
+	select {
+	case c.send <- data:
+	default: // the client is behind; it gets the next update
 	}
+}
+
+func (c *wsClient) writeLoop() {
+	defer c.conn.Close()
+	for data := range c.send {
+		_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			return
+		}
+	}
+	_ = c.conn.WriteControl(websocket.CloseMessage, nil, time.Now().Add(time.Second))
 }
 
 // StartMetricsBroadcaster starts broadcasting metrics to WebSocket clients
@@ -538,24 +555,22 @@ func (h *AdminHandler) webSocketMonitoring(c echo.Context) error {
 	}
 	defer ws.Close()
 
-	// Add client to the list
+	client := newWSClient(ws)
 	collector.wsClientsMutex.Lock()
-	collector.wsClients[ws] = true
+	collector.wsClients[client] = true
 	collector.wsClientsMutex.Unlock()
 
-	// Remove client when connection closes
+	// Remove the client when the connection closes; closing send ends its writer.
 	defer func() {
 		collector.wsClientsMutex.Lock()
-		delete(collector.wsClients, ws)
+		delete(collector.wsClients, client)
 		collector.wsClientsMutex.Unlock()
+		close(client.send)
 	}()
 
-	// Send initial metrics
-	metrics := collector.GetMetrics()
-	if data, err := json.Marshal(metrics); err == nil {
-		if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
-			return nil
-		}
+	// The first snapshot goes through the writer too.
+	if data, err := json.Marshal(collector.GetMetrics()); err == nil {
+		client.offer(data)
 	}
 
 	// Keep connection alive and handle ping/pong

@@ -71,6 +71,8 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   running chain (they only changed the database record) and accept only the pipeline's phases;
   the API works without MongoDB. The unimplemented "compile" endpoint and the bulk
   enable/disable endpoints, which only flipped database flags, are removed (MNT-03).
+- The admin's monitoring WebSocket gives each client its own writer: the first snapshot could
+  race a broadcast on the same connection, and one slow client held up all others (COR-13).
 - GraphQL proxying (COR-10): `__typename` is no longer blocked as introspection (it broke Apollo
   clients); client headers, `Authorization` included, reach the server; the server's status,
   headers and body come back unchanged instead of a re-encoded 200 (unreachable is 502, timeout

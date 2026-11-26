@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"odin/pkg/admin"
 	"odin/pkg/config"
@@ -359,4 +360,39 @@ func TestMonitoringSocketChecksTheOrigin(t *testing.T) {
 	code, err = dial("https://evil.example")
 	assert.Error(t, err)
 	assert.Equal(t, http.StatusForbidden, code)
+}
+
+// COR-13: every monitoring client has its own writer, so the first snapshot and broadcasts never
+// write to one connection at once, and a client that never reads does not hold up the others.
+func TestMonitoringBroadcastsDoNotBlockOrRace(t *testing.T) {
+	e, _ := newAdmin(t, baseConfig())
+	srv := httptest.NewServer(e)
+	t.Cleanup(srv.Close)
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/admin/ws/monitoring"
+	h := http.Header{"Authorization": {basic("root", "s3cret-pass")}}
+
+	reader, _, err := gws.DefaultDialer.Dial(wsURL, h)
+	require.NoError(t, err)
+	defer reader.Close()
+	stuck, _, err := gws.DefaultDialer.Dial(wsURL, h) // never reads
+	require.NoError(t, err)
+	defer stuck.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			admin.GetCollector().BroadcastMetrics()
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("broadcasting blocked on a client that does not read")
+	}
+
+	require.NoError(t, reader.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, msg, err := reader.ReadMessage()
+	require.NoError(t, err)
+	assert.Contains(t, string(msg), `"totalRequests"`)
 }
