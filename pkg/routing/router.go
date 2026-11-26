@@ -19,6 +19,12 @@ type Router struct {
 	cacheTTL       time.Duration
 	authMiddleware echo.MiddlewareFunc
 	routeMW        []echo.MiddlewareFunc
+	healthy        func(target string) bool
+}
+
+// SetHealthCheck lets service handlers skip targets that fail their health checks.
+func (r *Router) SetHealthCheck(healthy func(target string) bool) {
+	r.healthy = healthy
 }
 
 func NewRouter(e *echo.Echo, registry *service.Registry, logger *logrus.Logger) *Router {
@@ -61,10 +67,9 @@ func (r *Router) RegisterRoutes() error {
 		}).Info("Registering HTTP service route")
 
 		// Create service handler
-		handler, err := NewServiceHandler(svc, r.logger, r.cacheStore)
+		handler, err := NewServiceHandler(svc, r.logger, HandlerOptions{Healthy: r.healthy})
 		if err != nil {
-			r.logger.WithError(err).Warnf("Failed to create handler for service %s", svc.Name)
-			continue
+			return err
 		}
 
 		// Create route group

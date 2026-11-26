@@ -364,6 +364,7 @@ type HealthCheckConfig struct {
 	HealthyThreshold   int           `yaml:"healthyThreshold"`   // Successes before healthy (default: 2)
 	ExpectedStatus     []int         `yaml:"expectedStatus"`     // Expected HTTP status codes (default: [200, 204])
 	InsecureSkipVerify bool          `yaml:"insecureSkipVerify"` // Skip TLS verification
+	Path               string        `yaml:"path"`               // Checked path (default: /health)
 }
 
 // SetDefaults sets default values for ServiceConfig

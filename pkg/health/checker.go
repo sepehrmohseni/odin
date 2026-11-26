@@ -1,9 +1,11 @@
 package health
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,6 +44,7 @@ type Config struct {
 	HealthyThreshold   int           // Number of consecutive successes before marking healthy
 	ExpectedStatus     []int         // Expected HTTP status codes (default: 200)
 	InsecureSkipVerify bool          // Skip TLS verification
+	Path               string        // Path checked on each target (default: /health)
 }
 
 // TargetChecker performs active health checks on backend targets
@@ -52,6 +55,7 @@ type TargetChecker struct {
 	logger   *logrus.Logger
 	alerts   *AlertManager
 	stopChan chan struct{}
+	stopOnce sync.Once
 	wg       sync.WaitGroup
 	client   *http.Client
 }
@@ -73,6 +77,9 @@ func NewTargetChecker(config Config, logger *logrus.Logger, alerts *AlertManager
 	}
 	if len(config.ExpectedStatus) == 0 {
 		config.ExpectedStatus = []int{200, 204}
+	}
+	if config.Path == "" {
+		config.Path = "/health"
 	}
 
 	return &TargetChecker{
@@ -142,8 +149,10 @@ func (c *TargetChecker) Start() {
 
 // Stop halts the health checking loop
 func (c *TargetChecker) Stop() {
-	c.logger.Info("Stopping health checker")
-	close(c.stopChan)
+	c.stopOnce.Do(func() {
+		c.logger.Info("Stopping health checker")
+		close(c.stopChan)
+	})
 	c.wg.Wait()
 }
 
@@ -174,14 +183,11 @@ func (c *TargetChecker) checkAll() {
 func (c *TargetChecker) checkTarget(url string) (bool, time.Duration, error) {
 	start := time.Now()
 
-	// Build health check URL (append /health if not present)
-	healthURL := url
-	if healthURL[len(healthURL)-1] != '/' {
-		healthURL += "/"
-	}
-	healthURL += "health"
+	healthURL := strings.TrimSuffix(url, "/") + "/" + strings.TrimPrefix(c.config.Path, "/")
 
-	req, err := http.NewRequest("GET", healthURL, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), c.config.Timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
 		return false, 0, fmt.Errorf("failed to create request: %w", err)
 	}

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"odin/pkg/admin"
 	"odin/pkg/aggregator"
@@ -42,7 +41,7 @@ type Gateway struct {
 	router          *routing.Router
 	pluginManager   *plugins.PluginManager
 	tracingManager  *tracing.Manager
-	healthChecker   *health.TargetChecker
+	healthCheckers  []*health.TargetChecker
 	alertManager    *health.AlertManager
 	meshManager     *servicemesh.Manager
 	mongoRepo       mongodb.Repository
@@ -347,17 +346,6 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	alertManager.Start()
 	logger.Info("Alert manager started")
 
-	// Initialize health checker
-	healthCheckerConfig := health.Config{
-		Interval:           30 * time.Second,
-		Timeout:            5 * time.Second,
-		UnhealthyThreshold: 3,
-		HealthyThreshold:   2,
-		ExpectedStatus:     []int{200, 204},
-		InsecureSkipVerify: false,
-	}
-	healthChecker := health.NewTargetChecker(healthCheckerConfig, logger, alertManager)
-
 	// Initialize service mesh integration
 	meshConfig := servicemesh.Config{
 		Enabled:         cfg.ServiceMesh.Enabled,
@@ -416,7 +404,6 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		router:          router,
 		pluginManager:   pluginManager,
 		tracingManager:  tracingManager,
-		healthChecker:   healthChecker,
 		alertManager:    alertManager,
 		meshManager:     meshManager,
 		mongoRepo:       mongoRepo,
@@ -479,41 +466,44 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		}
 	}
 
-	// Add all service targets to health checker
+	// One active health checker per service that enables health checks, with that service's
+	// settings. Target selection skips targets their checker reports unhealthy.
+	checkerByTarget := make(map[string]*health.TargetChecker)
+	var healthCheckers []*health.TargetChecker
 	for _, svcConfig := range cfg.Services {
-		if svcConfig.HealthCheck != nil && svcConfig.HealthCheck.Enabled {
-			// Override defaults with service-specific config
-			svcHealthConfig := health.Config{
-				Interval:           svcConfig.HealthCheck.Interval,
-				Timeout:            svcConfig.HealthCheck.Timeout,
-				UnhealthyThreshold: svcConfig.HealthCheck.UnhealthyThreshold,
-				HealthyThreshold:   svcConfig.HealthCheck.HealthyThreshold,
-				ExpectedStatus:     svcConfig.HealthCheck.ExpectedStatus,
-				InsecureSkipVerify: svcConfig.HealthCheck.InsecureSkipVerify,
-			}
-
-			// Use service-specific checker if it has custom config, otherwise use global
-			var checker *health.TargetChecker
-			if svcHealthConfig.Interval != 0 || svcHealthConfig.Timeout != 0 {
-				checker = health.NewTargetChecker(svcHealthConfig, logger, alertManager)
-				checker.Start() // Start service-specific checker immediately
-			} else {
-				checker = healthChecker
-			}
-
-			for _, target := range svcConfig.Targets {
-				checker.AddTarget(target)
-				logger.WithFields(logrus.Fields{
-					"service": svcConfig.Name,
-					"target":  target,
-				}).Info("Added target to health monitoring")
-			}
+		if svcConfig.HealthCheck == nil || !svcConfig.HealthCheck.Enabled {
+			continue
 		}
+		checker := health.NewTargetChecker(health.Config{
+			Interval:           svcConfig.HealthCheck.Interval,
+			Timeout:            svcConfig.HealthCheck.Timeout,
+			UnhealthyThreshold: svcConfig.HealthCheck.UnhealthyThreshold,
+			HealthyThreshold:   svcConfig.HealthCheck.HealthyThreshold,
+			ExpectedStatus:     svcConfig.HealthCheck.ExpectedStatus,
+			InsecureSkipVerify: svcConfig.HealthCheck.InsecureSkipVerify,
+			Path:               svcConfig.HealthCheck.Path,
+		}, logger, alertManager)
+		for _, target := range svcConfig.Targets {
+			checker.AddTarget(target)
+			checkerByTarget[target] = checker
+			logger.WithFields(logrus.Fields{
+				"service": svcConfig.Name,
+				"target":  target,
+			}).Info("Added target to health monitoring")
+		}
+		checker.Start()
+		healthCheckers = append(healthCheckers, checker)
 	}
-
-	// Start the global health checker
-	healthChecker.Start()
-	logger.Info("Health monitoring started")
+	gateway.healthCheckers = healthCheckers
+	router.SetHealthCheck(func(target string) bool {
+		if checker, ok := checkerByTarget[target]; ok {
+			return checker.IsHealthy(target)
+		}
+		return true
+	})
+	if len(healthCheckers) > 0 {
+		logger.Info("Health monitoring started")
+	}
 
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -627,8 +617,8 @@ func (g *Gateway) Start() error {
 
 func (g *Gateway) Shutdown(ctx context.Context) error {
 	g.logger.Info("Stopping health monitoring...")
-	if g.healthChecker != nil {
-		g.healthChecker.Stop()
+	for _, checker := range g.healthCheckers {
+		checker.Stop()
 	}
 	if g.alertManager != nil {
 		g.alertManager.Stop()

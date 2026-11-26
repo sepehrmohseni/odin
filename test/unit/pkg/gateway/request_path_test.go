@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -14,9 +15,12 @@ import (
 	"odin/pkg/auth"
 	"odin/pkg/config"
 	"odin/pkg/gateway"
+	"odin/pkg/routing"
+	"odin/pkg/service"
 	"odin/pkg/servicemesh"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,14 +51,20 @@ func newBackend(t *testing.T, handler http.HandlerFunc) *backend {
 	return b
 }
 
+// newGateway builds a gateway for cfg, with retries off unless a test sets them.
 func newGateway(t *testing.T, cfg *config.Config) http.Handler {
 	t.Helper()
-	if cfg.Server.Port == 0 {
-		cfg.Server.Port = 8080
-	}
 	for i := range cfg.Services {
 		cfg.Services[i].SetDefaults()
 		cfg.Services[i].RetryCount = 0
+	}
+	return startGateway(t, cfg)
+}
+
+func startGateway(t *testing.T, cfg *config.Config) http.Handler {
+	t.Helper()
+	if cfg.Server.Port == 0 {
+		cfg.Server.Port = 8080
 	}
 	gw, err := gateway.New(cfg, t.TempDir()+"/config.yaml", quietLogger())
 	require.NoError(t, err)
@@ -317,4 +327,27 @@ func TestConsulTokenIsNotForwarded(t *testing.T) {
 	h.Set("X-Consul-Token", "client-sent")
 	require.NoError(t, mesh.InjectHeaders(h))
 	assert.Empty(t, h.Get("X-Consul-Token"))
+}
+
+func gatewayNew(t *testing.T, cfg *config.Config) (*gateway.Gateway, error) {
+	t.Helper()
+	return gateway.New(cfg, t.TempDir()+"/config.yaml", quietLogger())
+}
+
+// newRouterGateway serves one service.Config through the router, for options the YAML config
+// does not reach.
+func newRouterGateway(t *testing.T, svc *service.Config) http.Handler {
+	t.Helper()
+	e := echo.New()
+	registry := service.NewRegistry(quietLogger())
+	require.NoError(t, registry.Register(svc))
+	require.NoError(t, routing.NewRouter(e, registry, quietLogger()).RegisterRoutes())
+	return e
+}
+
+func atoi(t *testing.T, s string) int {
+	t.Helper()
+	n, err := strconv.Atoi(s)
+	require.NoError(t, err)
+	return n
 }
