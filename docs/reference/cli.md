@@ -3,7 +3,7 @@
 ## odin
 
 ```text
-odin [-config path] [-version] [-healthcheck]
+odin [-config path] [-version] [-healthcheck] [-openapi json|yaml]
 ```
 
 | Flag | Default | What |
@@ -11,6 +11,7 @@ odin [-config path] [-version] [-healthcheck]
 | `-config` | `config/config.yaml` | Configuration file. `services.yaml` in the same directory is read too. |
 | `-version` | | Print the version and build time, then exit. |
 | `-healthcheck` | | Request `http://127.0.0.1:$GATEWAY_PORT/health` (port 8080 by default) and exit 0 when it answers 200, 1 otherwise. Used by the Docker `HEALTHCHECK`. |
+| `-openapi` | | Print the [OpenAPI document](../openapi.md) generated from the configuration, as `json` or `yaml`, to standard output and exit. It is the document the gateway serves at `/openapi.json`; nothing is started. |
 
 Environment variables are listed in [Configuration](../configuration.md#environment-variables).
 

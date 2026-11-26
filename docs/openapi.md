@@ -33,8 +33,10 @@ what it knows:
 Upstream addresses (`targets`) are never included. gRPC services are left out. The document is
 built once at startup, so it follows configuration changes on restart.
 
-To keep a copy, set `outputPath` (for example `/var/lib/odin/openapi.yaml`): the generated
-document is written there at startup, as YAML for `.yaml` or `.yml` and JSON otherwise.
+To get the document without running the gateway, for example in CI, use
+`odin -config config.yaml -openapi yaml > openapi.yaml`. To keep a copy from the running
+gateway, set `outputPath` (for example `/var/lib/odin/openapi.yaml`): the generated document is
+written there at startup, as YAML for `.yaml` or `.yml` and JSON otherwise.
 
 ## Serving your own document
 

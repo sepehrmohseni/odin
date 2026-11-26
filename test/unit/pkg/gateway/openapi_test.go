@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"odin/pkg/config"
+	"odin/pkg/gateway"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,4 +57,26 @@ func TestOpenAPIIsOffByDefault(t *testing.T) {
 	})
 	assert.Equal(t, http.StatusNotFound, serve(h, "GET", "/openapi.json", nil, nil).Code)
 	assert.Equal(t, http.StatusNotFound, serve(h, "GET", "/openapi", nil, nil).Code)
+}
+
+// gateway.OpenAPI (behind `odin -openapi`) produces exactly the document the gateway serves.
+func TestOpenAPICommandMatchesTheServedDocument(t *testing.T) {
+	be := newBackend(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	cfg := &config.Config{
+		Auth:      config.AuthConfig{JWTSecret: testSecret},
+		OpenAPI:   config.OpenAPIConfig{Enabled: true, Title: "Shop"},
+		RateLimit: config.RateLimitConfig{Enabled: true, Limit: 10, Duration: time.Minute},
+		Services: []config.ServiceConfig{
+			{Name: "orders", BasePath: "/api/orders", Targets: []string{be.URL}, Authentication: true},
+			{Name: "catalog", BasePath: "/api/catalog", Targets: []string{be.URL}},
+		},
+	}
+	_, h := pipelineGateway(t, cfg)
+
+	want, err := gateway.OpenAPI(cfg).JSON()
+	require.NoError(t, err)
+	rec := serve(h, "GET", "/openapi.json", nil, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, string(want), rec.Body.String())
+	assert.Contains(t, rec.Body.String(), `"429"`)
 }

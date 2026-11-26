@@ -148,93 +148,7 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	registry := service.NewRegistry(logger)
 
 	for _, svcConfig := range cfg.Services {
-		svc := &service.Config{
-			Name:           svcConfig.Name,
-			BasePath:       svcConfig.BasePath,
-			Targets:        svcConfig.Targets,
-			StripBasePath:  svcConfig.StripBasePath,
-			Timeout:        svcConfig.Timeout,
-			RetryCount:     svcConfig.RetryCount,
-			RetryDelay:     svcConfig.RetryDelay,
-			Authentication: svcConfig.Authentication,
-			LoadBalancing:  svcConfig.LoadBalancing,
-			Headers:        svcConfig.Headers,
-			Protocol:       svcConfig.Protocol,
-			CacheDisabled:  svcConfig.Cache != nil && svcConfig.Cache.Enabled != nil && !*svcConfig.Cache.Enabled,
-		}
-		if svcConfig.Cache != nil {
-			svc.CacheTTL = svcConfig.Cache.TTL
-		}
-		svc.RateLimit, svc.RateLimitWindow = serviceRateLimit(cfg.RateLimit, svcConfig.RateLimit)
-		if cc := svcConfig.Canary; cc != nil {
-			svc.Canary = &service.CanaryConfig{
-				Enabled:     cc.Enabled,
-				Targets:     cc.Targets,
-				Weight:      cc.Weight,
-				Header:      cc.Header,
-				HeaderValue: cc.HeaderValue,
-				CookieName:  cc.CookieName,
-				CookieValue: cc.CookieValue,
-			}
-		}
-		if tc := svcConfig.Transformation; tc != nil {
-			svc.Transformation = &service.TransformationConfig{Request: tc.Request, Response: tc.Response}
-		}
-		if cb := svcConfig.CircuitBreaker; cb != nil && cb.Enabled {
-			svc.CircuitBreaker = circuitSettings(cb)
-		}
-
-		svc.Transform.Request = make([]service.TransformRule, len(svcConfig.Transform.Request))
-		for i, rule := range svcConfig.Transform.Request {
-			svc.Transform.Request[i] = service.TransformRule{
-				From:    rule.From,
-				To:      rule.To,
-				Default: rule.Default,
-			}
-		}
-
-		svc.Transform.Response = make([]service.TransformRule, len(svcConfig.Transform.Response))
-		for i, rule := range svcConfig.Transform.Response {
-			svc.Transform.Response[i] = service.TransformRule{
-				From:    rule.From,
-				To:      rule.To,
-				Default: rule.Default,
-			}
-		}
-
-		if svcConfig.Aggregation != nil {
-			aggregation := &service.AggregationConfig{
-				Dependencies: make([]service.DependencyConfig, len(svcConfig.Aggregation.Dependencies)),
-			}
-
-			for i, dep := range svcConfig.Aggregation.Dependencies {
-				dependency := service.DependencyConfig{
-					Service:          dep.Service,
-					Path:             dep.Path,
-					ParameterMapping: make([]service.MappingConfig, len(dep.ParameterMapping)),
-					ResultMapping:    make([]service.MappingConfig, len(dep.ResultMapping)),
-				}
-
-				for j, mapping := range dep.ParameterMapping {
-					dependency.ParameterMapping[j] = service.MappingConfig{
-						From: mapping.From,
-						To:   mapping.To,
-					}
-				}
-
-				for j, mapping := range dep.ResultMapping {
-					dependency.ResultMapping[j] = service.MappingConfig{
-						From: mapping.From,
-						To:   mapping.To,
-					}
-				}
-
-				aggregation.Dependencies[i] = dependency
-			}
-
-			svc.Aggregation = aggregation
-		}
-
+		svc := serviceFromConfig(cfg, svcConfig)
 		if err := registry.Register(svc); err != nil {
 			logger.WithError(err).Warnf("Failed to register service %s", svc.Name)
 		}
@@ -889,4 +803,110 @@ func circuitSettings(cb *config.CircuitBreakerConfig) *service.CircuitBreakerSet
 		s.MaxRequests = 1
 	}
 	return s
+}
+
+// serviceFromConfig builds the runtime form of one service. config.ServiceConfig and
+// service.Config are separate types: a new option must be copied here or it does nothing.
+func serviceFromConfig(cfg *config.Config, svcConfig config.ServiceConfig) *service.Config {
+	svc := &service.Config{
+		Name:           svcConfig.Name,
+		BasePath:       svcConfig.BasePath,
+		Targets:        svcConfig.Targets,
+		StripBasePath:  svcConfig.StripBasePath,
+		Timeout:        svcConfig.Timeout,
+		RetryCount:     svcConfig.RetryCount,
+		RetryDelay:     svcConfig.RetryDelay,
+		Authentication: svcConfig.Authentication,
+		LoadBalancing:  svcConfig.LoadBalancing,
+		Headers:        svcConfig.Headers,
+		Protocol:       svcConfig.Protocol,
+		CacheDisabled:  svcConfig.Cache != nil && svcConfig.Cache.Enabled != nil && !*svcConfig.Cache.Enabled,
+	}
+	if svcConfig.Cache != nil {
+		svc.CacheTTL = svcConfig.Cache.TTL
+	}
+	svc.RateLimit, svc.RateLimitWindow = serviceRateLimit(cfg.RateLimit, svcConfig.RateLimit)
+	if cc := svcConfig.Canary; cc != nil {
+		svc.Canary = &service.CanaryConfig{
+			Enabled:     cc.Enabled,
+			Targets:     cc.Targets,
+			Weight:      cc.Weight,
+			Header:      cc.Header,
+			HeaderValue: cc.HeaderValue,
+			CookieName:  cc.CookieName,
+			CookieValue: cc.CookieValue,
+		}
+	}
+	if tc := svcConfig.Transformation; tc != nil {
+		svc.Transformation = &service.TransformationConfig{Request: tc.Request, Response: tc.Response}
+	}
+	if cb := svcConfig.CircuitBreaker; cb != nil && cb.Enabled {
+		svc.CircuitBreaker = circuitSettings(cb)
+	}
+
+	svc.Transform.Request = make([]service.TransformRule, len(svcConfig.Transform.Request))
+	for i, rule := range svcConfig.Transform.Request {
+		svc.Transform.Request[i] = service.TransformRule{
+			From:    rule.From,
+			To:      rule.To,
+			Default: rule.Default,
+		}
+	}
+
+	svc.Transform.Response = make([]service.TransformRule, len(svcConfig.Transform.Response))
+	for i, rule := range svcConfig.Transform.Response {
+		svc.Transform.Response[i] = service.TransformRule{
+			From:    rule.From,
+			To:      rule.To,
+			Default: rule.Default,
+		}
+	}
+
+	if svcConfig.Aggregation != nil {
+		aggregation := &service.AggregationConfig{
+			Dependencies: make([]service.DependencyConfig, len(svcConfig.Aggregation.Dependencies)),
+		}
+
+		for i, dep := range svcConfig.Aggregation.Dependencies {
+			dependency := service.DependencyConfig{
+				Service:          dep.Service,
+				Path:             dep.Path,
+				ParameterMapping: make([]service.MappingConfig, len(dep.ParameterMapping)),
+				ResultMapping:    make([]service.MappingConfig, len(dep.ResultMapping)),
+			}
+
+			for j, mapping := range dep.ParameterMapping {
+				dependency.ParameterMapping[j] = service.MappingConfig{
+					From: mapping.From,
+					To:   mapping.To,
+				}
+			}
+
+			for j, mapping := range dep.ResultMapping {
+				dependency.ResultMapping[j] = service.MappingConfig{
+					From: mapping.From,
+					To:   mapping.To,
+				}
+			}
+
+			aggregation.Dependencies[i] = dependency
+		}
+
+		svc.Aggregation = aggregation
+	}
+	return svc
+}
+
+// OpenAPI returns the OpenAPI document the gateway serves for cfg (see openapi.Generate),
+// without starting anything; `odin -openapi` prints it.
+func OpenAPI(cfg *config.Config) *openapi.Spec {
+	services := make([]*service.Config, 0, len(cfg.Services))
+	for _, sc := range cfg.Services {
+		services = append(services, serviceFromConfig(cfg, sc))
+	}
+	return openapi.Generate(openapi.Options{
+		Title:       cfg.OpenAPI.Title,
+		Version:     cfg.OpenAPI.Version,
+		Description: cfg.OpenAPI.Description,
+	}, services)
 }

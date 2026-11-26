@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"odin/pkg/service"
@@ -233,9 +234,25 @@ func describe(svc *service.Config) string {
 		parts = append(parts, "Requires a JWT bearer token.")
 	}
 	if svc.RateLimit > 0 {
-		parts = append(parts, fmt.Sprintf("Limited to %d requests per %s per client.", svc.RateLimit, svc.RateLimitWindow))
+		parts = append(parts, fmt.Sprintf("Limited to %d requests per %s per client.", svc.RateLimit, humanWindow(svc.RateLimitWindow)))
 	}
 	return strings.Join(parts, " ")
+}
+
+// humanWindow writes a rate-limit window as "minute", "10 seconds" or "2 hours".
+func humanWindow(d time.Duration) string {
+	for _, u := range []struct {
+		d    time.Duration
+		name string
+	}{{time.Hour, "hour"}, {time.Minute, "minute"}, {time.Second, "second"}} {
+		if d >= u.d && d%u.d == 0 {
+			if n := d / u.d; n > 1 {
+				return fmt.Sprintf("%d %ss", n, u.name)
+			}
+			return u.name
+		}
+	}
+	return d.String()
 }
 
 func operation(svc *service.Config, method, suffix, description string) *Operation {

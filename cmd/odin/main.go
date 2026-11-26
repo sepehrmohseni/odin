@@ -14,6 +14,8 @@ import (
 	"odin/pkg/config"
 	"odin/pkg/gateway"
 	"odin/pkg/logging"
+
+	"github.com/sirupsen/logrus"
 )
 
 // version and buildTime are set at build time (see the Makefile and Dockerfile).
@@ -25,10 +27,13 @@ var (
 func main() {
 	var configPath string
 	var showVersion, healthcheck bool
+	var openapiFormat string
 	flag.StringVar(&configPath, "config", "config/config.yaml", "Path to configuration file")
 	flag.BoolVar(&showVersion, "version", false, "Print the version and exit")
 	flag.BoolVar(&healthcheck, "healthcheck", false,
 		"Check http://127.0.0.1:$GATEWAY_PORT/health (default port 8080) and exit 0 if healthy; for container health checks")
+	flag.StringVar(&openapiFormat, "openapi", "",
+		"Print the OpenAPI document generated from the configuration (json or yaml) and exit")
 	flag.Parse()
 
 	if showVersion {
@@ -47,6 +52,10 @@ func main() {
 			JSON:  false,
 		}
 		logging.ConfigureLogger(logger, loggingConfig)
+	}
+
+	if openapiFormat != "" {
+		os.Exit(printOpenAPI(configPath, openapiFormat, logger))
 	}
 
 	logger.Infof("Starting Odin API Gateway %s", version)
@@ -187,6 +196,36 @@ func runHealthcheck() int {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		fmt.Fprintln(os.Stderr, "unhealthy: status", resp.StatusCode)
+		return 1
+	}
+	return 0
+}
+
+// printOpenAPI writes the document the gateway would serve at /openapi.json (or .yaml) for the
+// configuration to stdout, without starting the gateway. Logs go to stderr.
+func printOpenAPI(configPath, format string, logger *logrus.Logger) int {
+	if format != "json" && format != "yaml" {
+		fmt.Fprintf(os.Stderr, "-openapi takes json or yaml, not %q\n", format)
+		return 2
+	}
+	cfg, err := config.Load(configPath, logger)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loading %s: %v\n", configPath, err)
+		return 1
+	}
+	spec := gateway.OpenAPI(cfg)
+	var out []byte
+	if format == "json" {
+		out, err = spec.JSON()
+		out = append(out, '\n')
+	} else {
+		out, err = spec.YAML()
+	}
+	if err == nil {
+		_, err = os.Stdout.Write(out)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "writing the OpenAPI document: %v\n", err)
 		return 1
 	}
 	return 0

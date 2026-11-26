@@ -59,6 +59,14 @@ func TestGenerateDescribesOnlyWhatTheGatewayKnows(t *testing.T) {
 	require.Len(t, users.Parameters, 1)
 	assert.Equal(t, "path", users.Parameters[0].Name)
 
+	var usersTag string
+	for _, tag := range spec.Tags {
+		if tag.Name == "users" {
+			usersTag = tag.Description
+		}
+	}
+	assert.Contains(t, usersTag, "Limited to 100 requests per minute per client.")
+
 	files := spec.Paths["/files"].Get
 	assert.Empty(t, files.Security)
 	assert.NotContains(t, files.Responses, "401")
