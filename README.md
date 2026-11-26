@@ -14,9 +14,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 <br>
 [![Release downloads](https://img.shields.io/github/downloads/sepehrmohseni/odin/total?label=release%20downloads&color=0b6e7a)](https://github.com/sepehrmohseni/odin/releases)
-[![Image pulls](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsepehrmohseni%2Fodin%2Ftraffic-data%2Fimage-pulls.json)](https://github.com/sepehrmohseni/odin/pkgs/container/odin)
-[![Clones](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsepehrmohseni%2Fodin%2Ftraffic-data%2Fclones.json)](https://github.com/sepehrmohseni/odin/graphs/traffic)
-[![Views](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsepehrmohseni%2Fodin%2Ftraffic-data%2Fviews.json)](https://github.com/sepehrmohseni/odin/graphs/traffic)
+[![Image pulls](https://img.shields.io/endpoint?url=https%3A%2F%2Fsepehrmohseni.github.io%2Fodin%2Ftraffic%2Fimage-pulls.json)](https://github.com/sepehrmohseni/odin/pkgs/container/odin)
+[![Clones](https://img.shields.io/endpoint?url=https%3A%2F%2Fsepehrmohseni.github.io%2Fodin%2Ftraffic%2Fclones.json)](https://github.com/sepehrmohseni/odin/graphs/traffic)
+[![Views](https://img.shields.io/endpoint?url=https%3A%2F%2Fsepehrmohseni.github.io%2Fodin%2Ftraffic%2Fviews.json)](https://github.com/sepehrmohseni/odin/graphs/traffic)
 
 An API gateway written in Go: routing, authentication, rate limiting, caching, resilience and
 observability for HTTP, WebSocket and GraphQL services, with a web admin interface.

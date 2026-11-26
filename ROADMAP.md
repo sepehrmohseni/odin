@@ -101,7 +101,7 @@ and view badges.
 
 - Add the `TRAFFIC_TOKEN` repository secret (a fine-grained token with read-only
   Administration access to this repository), so the clone and view badges show numbers
-  instead of "pending" (`.github/workflows/traffic.yml`).
+  instead of "pending" (the docs workflow updates them daily).
 - Decide when Odin is 1.0: the promise that configuration keys and admin API routes no longer
   change without a deprecation period.
 - Say when to start section 2 (OpenID Connect); the order of sections 2 to 6 is agreed.

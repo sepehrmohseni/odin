@@ -3,21 +3,27 @@
 downloads, and write them as shields.io endpoint badges.
 
 GitHub's traffic API reports only the last 14 days and needs a token with read access to the
-repository's administration settings, so a daily workflow (.github/workflows/traffic.yml) runs
-this and commits the result to the traffic-data branch:
+repository's administration settings. The docs workflow (.github/workflows/docs.yml) runs this
+on every deploy and once a day, and publishes the files with the site, under /traffic/:
 
   traffic.json     per-day counts, merged across runs (the source of the totals)
   clones.json      badge: total clones
   views.json       badge: total views
   image-pulls.json badge: container image downloads (from the public package page)
 
-Usage: TRAFFIC_TOKEN=... REPO=owner/name python3 scripts/traffic-badges.py <data-dir>
+The totals live only on the site, so each run reads the previous traffic.json back from it.
+A missing file (404) starts new totals; any other failure stops the run, so a deploy never
+replaces the history with an empty one.
+
+Usage: TRAFFIC_TOKEN=... REPO=owner/name [SITE_URL=https://owner.github.io/name/] \\
+         python3 scripts/traffic-badges.py <output-dir>
 """
 
 import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 
 API = "https://api.github.com"
@@ -31,6 +37,16 @@ def get(url, token=None):
         req.add_header("Accept", "application/vnd.github+json")
     with urllib.request.urlopen(req, timeout=30) as resp:
         return resp.read().decode()
+
+
+def previous(site):
+    try:
+        return json.loads(get(site + "traffic/traffic.json"))
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
+        print("no earlier totals on the site: starting new ones", file=sys.stderr)
+        return {"clones": {}, "views": {}, "imagePulls": None}
 
 
 def short(n):
@@ -52,17 +68,20 @@ def badge(path, label, message):
 def main():
     out = sys.argv[1]
     repo = os.environ["REPO"]
+    owner, name = repo.split("/")
+    site = os.environ.get("SITE_URL") or f"https://{owner.lower()}.github.io/{name}/"
+    if not site.endswith("/"):
+        site += "/"
     token = os.environ.get("TRAFFIC_TOKEN", "")
-    history_path = os.path.join(out, "traffic.json")
-    try:
-        with open(history_path) as f:
-            history = json.load(f)
-    except FileNotFoundError:
-        history = {"clones": {}, "views": {}, "imagePulls": None}
+    history = previous(site)
 
     if token:
         for kind in ("clones", "views"):
-            data = json.loads(get(f"{API}/repos/{repo}/traffic/{kind}", token))
+            try:
+                data = json.loads(get(f"{API}/repos/{repo}/traffic/{kind}", token))
+            except Exception as e:  # noqa: BLE001 - keep the totals; the next run adds the days
+                print(f"{kind} not updated: {e}", file=sys.stderr)
+                continue
             for day in data.get(kind, []):
                 # A day's counts only grow while it is within the 14-day window; keep the latest.
                 history[kind][day["timestamp"][:10]] = {"count": day["count"], "uniques": day["uniques"]}
@@ -71,7 +90,6 @@ def main():
 
     # The package page is public HTML; its "Total downloads" figure has no API. If the page
     # changes, keep the last known value rather than failing.
-    owner, name = repo.split("/")
     try:
         page = get(f"https://github.com/{owner}/{name}/pkgs/container/{name}")
         m = re.search(r'Total downloads</span>\s*<h3[^>]*title="([\d,]+)"', page)
@@ -80,7 +98,8 @@ def main():
     except Exception as e:  # noqa: BLE001 - a scrape failure must not stop the other badges
         print(f"image downloads not updated: {e}", file=sys.stderr)
 
-    with open(history_path, "w") as f:
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "traffic.json"), "w") as f:
         json.dump(history, f, indent=1, sort_keys=True)
         f.write("\n")
 

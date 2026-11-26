@@ -1,12 +1,15 @@
 name: Docs
 
 # Builds the documentation site (mkdocs.yml) on every change and deploys it to GitHub Pages
-# from main. The build is strict: a broken internal link or anchor fails it.
+# from main. The build is strict: a broken internal link or anchor fails it. The daily run
+# refreshes the README's traffic badges, which the site serves under /traffic/.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -28,6 +31,15 @@ jobs:
           docker run --rm -e NO_MKDOCS_2_WARNING=1 -v "$PWD:/docs" \
             squidfunk/mkdocs-material:9.8.2 build --strict --site-dir /docs/_site
           sudo chown -R "$(id -u):$(id -g)" _site
+      # The badges' running totals exist only on the live site: every deploy reads them back
+      # and adds the last 14 days, so this runs whenever the deploy job does. Clones and views
+      # need the TRAFFIC_TOKEN secret (read-only Administration access to this repository).
+      - name: Traffic badges
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: python3 -I scripts/traffic-badges.py _site/traffic
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
