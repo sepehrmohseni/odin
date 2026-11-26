@@ -31,6 +31,11 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   these; any other name is rejected.
 - Upload validation accepts plugins that export `New` or `Middleware`.
 
+### Removed
+
+- `pkg/proxy`, `pkg/debug` and `pkg/utils`, which nothing used: the proxy is `pkg/routing`, the
+  debug endpoints are in `pkg/health` (behind `server.debugEndpoints`) (MNT-03).
+
 ## [0.1.0] - 2026-11-26
 
 First release: the hardening pass described in docs/AUDIT.md.
