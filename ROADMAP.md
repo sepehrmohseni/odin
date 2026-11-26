@@ -1,51 +1,96 @@
-# Odin API Gateway Roadmap
+# Odin API Gateway roadmap
 
-This document outlines the planned future development for the Odin API Gateway project.
+What is planned, in order. Items link to their finding in [docs/AUDIT.md](docs/AUDIT.md); the
+audit's Status column records what has been fixed and in which commit.
 
-## Long-term Goals (6-12 months)
+## Now
 
-- [x] Ability to add Go plugin and register as middleware from admin panel similar to Traefik api gateway plugin registration
-- [x] Integration with popular API management platforms like Postman API Platform and Amazon API Gateway
-- [ ] Refactor to a better structured html templates with good coding
-- [ ] Add all the abilities to frontend admin panel to manage all o the gateway setting and monitoring from the admin panel (based on already implemented goals and features and help of files in docs folder and other document readme and roadmap and files and codes)
-- [x] Upgrade to latest Go version and packages
+Critical and high items that are contained enough to finish in the current hardening pass.
 
-## Recently Completed Goals
+- [x] Admin API secure by default: not mounted unless enabled, no default password, real sessions,
+      CSRF protection, secrets redacted ([SEC-01](docs/AUDIT.md#security), SEC-04, SEC-05,
+      SEC-09, SEC-16, SEC-17, SEC-18)
+- [x] Plugin uploads validated without being executed; plugin paths confined
+      ([SEC-02](docs/AUDIT.md#security), SEC-06, SEC-07, SEC-08)
+- [x] Response cache after authentication; JWT fails closed; GraphQL/gRPC/aggregate auth;
+      Consul token not forwarded ([SEC-03](docs/AUDIT.md#security), SEC-10..SEC-13, SEC-19)
+- [x] Correct proxying: retries, streaming, forwarded and hop-by-hop headers, paths, health-aware
+      target selection ([COR-01](docs/AUDIT.md#correctness), COR-07, COR-08)
+- [x] Rate limiting and circuit breakers on the request path ([COR-02](docs/AUDIT.md#correctness),
+      COR-03)
+- [x] Canary, transformations, WebSocket and aggregation wired from config
+      ([COR-04](docs/AUDIT.md#correctness)..COR-06)
+- [x] Lifecycle, timeouts and bounded metrics ([OPS-01](docs/AUDIT.md#operations)..OPS-04,
+      COR-14, COR-18)
+- [x] Toolchain and dependencies current, lint and vulnerability checks in CI and in Docker
+      ([SEC-23](docs/AUDIT.md#security), MNT-01, MNT-02, TST-01)
+- [ ] Production Docker image, Compose dev stack with `.env.example`, no credentials in shipped
+      defaults ([OPS-05](docs/AUDIT.md#operations), OPS-08, SEC-25)
+- [ ] Helm chart that renders, matches the config schema and keeps secrets in Secrets
+      ([OPS-06](docs/AUDIT.md#operations))
+- [ ] Release workflow that can publish multi-arch images and binaries
+      ([OPS-07](docs/AUDIT.md#operations)) — the first tag and public image wait for the owner
+- [ ] Admin pages render their own content; plugin pages render at all
+      ([COR-11](docs/AUDIT.md#correctness))
+- [ ] "Export to Postman" refuses instead of overwriting a collection with a placeholder
+      ([COR-15](docs/AUDIT.md#correctness))
+- [ ] First-run setup: one-command quickstart script and a setup guide (Docker, Compose, binary,
+      Helm) that ends at the admin login
+- [ ] README and docs describe only what works; broken links fixed
+      ([DOC-01](docs/AUDIT.md#documentation)..DOC-04)
 
-- [x] Basic request routing
-- [x] JWT authentication
-- [x] Response aggregation
-- [x] Request/Response transformation
-- [x] Prometheus metrics
-- [x] Admin UI
-- [x] OAuth2 authentication support
-- [x] Circuit breaker implementation
-- [x] WebSocket proxying capability
-- [x] Comprehensive test coverage (80%+)
-- [x] Helm chart for Kubernetes deployment
-- [x] Enhanced documentation with practical examples
-- [x] Improve test coverage to at least 80%
-- [x] Add support for OAuth2 authentication
-- [x] Implement circuit breaker pattern
-- [x] Enhance documentation with more examples
-- [x] Add WebSocket support
-- [x] Create Helm chart for Kubernetes deployment
-- [x] Implement request/response caching strategies
-- [x] Add API rate limiting per user/key
-- [x] Add GraphQL proxy support with query validation and caching
-- [x] Develop flexible plugin system for extending gateway functionality
-- [x] Add gRPC protocol support with HTTP-to-gRPC transcoding
-- [x] Implement distributed tracing with OpenTelemetry
-- [x] Create comprehensive dashboard for real-time monitoring
-- [x] Support for canary deployments
-- [x] Add request transformation templates
-- [x] Enhance tracing with trace visualization UI
-- [x] Add service health monitoring and alerting
-- [x] Develop service mesh integration (Supports Istio, Linkerd, Consul Connect with mTLS, service discovery, and automatic header injection)
-- [x] Support for WebAssembly extensions (Dynamic plugin loading with wazero runtime, supports request/response transformation, auth, rate limiting, and custom middleware)
-- [x] Multi-cluster deployment and management (Cross-cluster routing, health monitoring, failover, weighted load balancing, and session affinity)
-- [x] Automated API documentation generation (OpenAPI 3.0 spec generation from service configs with auto-discovery)
-- [x] Ability to add service information based on openapi json file collection import (Import OpenAPI/Swagger specs to auto-generate service configurations)
-- [x] MongoDB integration for centralized storage (13 collections for services, config, metrics, traces, alerts, health checks, clusters, plugins, users, API keys, rate limits, cache, and audit logs with TTL indexes and automatic cleanup)
-- [x] Add AI-powered traffic analysis and anomaly detection using dockerized grok 1 open release "https://github.com/xai-org/grok-1"
-- [x] **Goal #7: Plugin Binary Upload & Management System** (Complete plugin upload via admin panel with drag-and-drop UI, 6-layer validation, GridFS storage, hot-reload enable/disable, and comprehensive management dashboard - October 2025)
+## Next
+
+Medium items, and changes that alter behaviour or stored data and so need the owner's decision
+first. Effort: S = hours, M = a day or two, L = a week or more.
+
+| Item | Finding | Effort | Why it waits |
+| --- | --- | --- | --- |
+| Run uploaded middleware plugins on the request path (mount the chain with ordered phases), or refuse to enable them | [SEC-14](docs/AUDIT.md#security), COR-21 | L | Defines the plugin pipeline; part of milestone M0 |
+| Fix the plugin manager: copy-on-write hook lists, duplicate loads, all four hooks, HTTP errors, one plugins schema | [COR-21](docs/AUDIT.md#correctness) | M | Changes the stored plugin documents |
+| `OAuth2Middleware`: validate tokens (introspection/OIDC) or remove it | [SEC-15](docs/AUDIT.md#security) | M | Exported API; removing it is a breaking change |
+| gRPC transcoding through server reflection and `dynamicpb` | [COR-09](docs/AUDIT.md#correctness) | L | New design; current behaviour never worked |
+| GraphQL: allow `__typename`, forward headers, keep upstream status, implement or drop query caching | [COR-10](docs/AUDIT.md#correctness) | S | Changes what clients receive |
+| Admin UI talks to the real API (JSON tags on config, `OdinAPI` methods, Postman routes) | [COR-12](docs/AUDIT.md#correctness) | M | Adds JSON field names to the config API |
+| One writer goroutine per monitoring WebSocket client | [COR-13](docs/AUDIT.md#correctness) | S | — |
+| MongoDB IDs: one representation (ObjectID) across repository and migration | [COR-17](docs/AUDIT.md#correctness) | M | Stored data |
+| Warn about unknown config keys (strict decoding with fallback) | [COR-24](docs/AUDIT.md#correctness) | S | Noisy for existing configs at first |
+| Newman runner: temp file, JSON reporter, correct TLS flag, timeouts | [SEC-26](docs/AUDIT.md#security) | S | — |
+| Raise `pkg/` coverage (now measured; was 9.5 %) and replace tests that re-implement code | [TST-01](docs/AUDIT.md#tests), TST-03, TST-05 | M | — |
+| Decide per unwired package (proxy, wasm, multicluster, openapi, ai, errors, debug, utils, admin `middleware_api`/`mongodb_api`/`ai_api`): wire in or remove | [MNT-03](docs/AUDIT.md#maintainability) | M | Removing features needs approval |
+
+## Later
+
+- Live configuration reload without dropping connections ([COR-23](docs/AUDIT.md#correctness))
+- Wire WASM plugins, with enforced timeouts ([SEC-28](docs/AUDIT.md#security), COR-22)
+- AI traffic analysis that is correct (σ = 0, bot heuristic, per-service baselines) before it is
+  wired in ([COR-19](docs/AUDIT.md#correctness))
+- Multi-cluster routing with synchronised state ([COR-20](docs/AUDIT.md#correctness)); real
+  service discovery for Consul, Istio and Linkerd, and upstream mTLS
+  ([COR-29](docs/AUDIT.md#correctness))
+- OpenAPI generation that is valid OpenAPI ([COR-28](docs/AUDIT.md#correctness))
+- Encrypt integration credentials at rest ([SEC-22](docs/AUDIT.md#security))
+- One service config type instead of field-by-field copies ([MNT-05](docs/AUDIT.md#maintainability))
+- Major upgrades: Echo v5, mongo-driver v2 ([MNT-06](docs/AUDIT.md#maintainability))
+- Fold the `docs/GOAL-*` status reports into real documentation ([DOC-05](docs/AUDIT.md#documentation))
+- Gateway features that do not exist yet: weighted, least-connections and consistent-hash load
+  balancing; key-auth, basic auth, CORS and IP allow/deny plugins; request IDs; TLS termination
+  with SNI; Kubernetes Gateway API support; a docs site
+
+## What works today
+
+Verified by the tests in `test/unit/pkg/gateway`, which drive the whole gateway against real
+HTTP backends:
+
+- Path-based routing to HTTP services, round-robin and random load balancing, per-service
+  timeouts, idempotent-only retries with failover, active health checks that steer traffic
+- JWT authentication per service (HMAC, `exp` required, optional issuer and audience)
+- Rate limiting per service and client (in memory or Redis; fixed window, sliding window, token
+  bucket), per-target circuit breakers
+- Response caching (memory or Redis) that respects authentication and Cache-Control
+- Canary routing by header, cookie or weight; template and field-mapping transformations;
+  response enrichment from aggregation dependencies; `/aggregate`
+- WebSocket and server-sent-event proxying; GraphQL proxying with depth and introspection limits
+- Prometheus metrics, OpenTelemetry tracing with context propagation, structured access logs
+- Admin web interface and API (opt-in, authenticated), Go plugin upload with static validation
+- MongoDB storage for plugins and Postman integration settings
