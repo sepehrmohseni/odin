@@ -447,6 +447,9 @@ func Load(configPath string, logger *logrus.Logger) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
+	if data, err = ExpandEnv(data); err != nil {
+		return nil, fmt.Errorf("%s: %w", configPath, err)
+	}
 
 	var config Config
 	if err := yaml.Unmarshal(data, &config); err != nil {
@@ -500,6 +503,9 @@ func Load(configPath string, logger *logrus.Logger) (*Config, error) {
 	if _, err := os.Stat(servicesPath); err == nil {
 		servicesData, err := os.ReadFile(servicesPath)
 		if err == nil {
+			if servicesData, err = ExpandEnv(servicesData); err != nil {
+				return nil, fmt.Errorf("%s: %w", servicesPath, err)
+			}
 			var servicesConfig struct {
 				Services []ServiceConfig `yaml:"services"`
 			}
