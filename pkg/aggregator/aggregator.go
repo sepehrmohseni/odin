@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"odin/pkg/auth"
 	"odin/pkg/config"
 	"strings"
 	"sync"
@@ -19,6 +21,26 @@ type Aggregator struct {
 	logger         *logrus.Logger
 	serviceConfigs map[string]config.ServiceConfig
 	client         *http.Client
+	auth           Authenticator
+}
+
+// Authenticator validates a request's credentials (the gateway passes its JWT validator).
+type Authenticator interface {
+	Validate(r *http.Request) (*auth.JWTClaims, error)
+}
+
+const (
+	// maxAggregateServices bounds the fan-out of one /aggregate request.
+	maxAggregateServices = 10
+	// maxAggregateBody bounds each service response read into memory.
+	maxAggregateBody   = 10 << 20
+	defaultCallTimeout = 30 * time.Second
+)
+
+// SetAuthenticator makes /aggregate enforce authentication for services that require it. Without
+// one, such services are refused rather than called unauthenticated.
+func (a *Aggregator) SetAuthenticator(v Authenticator) {
+	a.auth = v
 }
 
 type ServiceResponse struct {
@@ -43,7 +65,7 @@ func New(logger *logrus.Logger, services []config.ServiceConfig) *Aggregator {
 	return &Aggregator{
 		logger:         logger,
 		serviceConfigs: serviceMap,
-		client:         &http.Client{},
+		client:         &http.Client{Timeout: 2 * defaultCallTimeout},
 	}
 }
 
@@ -59,16 +81,53 @@ func (a *Aggregator) AggregateHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "services parameter is required")
 	}
 
-	serviceNames := strings.Split(services, ",")
+	// De-duplicate and bound the fan-out: one request must not turn into an unbounded number of
+	// upstream calls.
+	seen := make(map[string]bool)
+	var serviceNames []string
+	for _, name := range strings.Split(services, ",") {
+		name = strings.TrimSpace(name)
+		if name != "" && !seen[name] {
+			seen[name] = true
+			serviceNames = append(serviceNames, name)
+		}
+	}
+	if len(serviceNames) > maxAggregateServices {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("at most %d services can be aggregated in one request", maxAggregateServices))
+	}
+
+	// Services with authentication: true need a valid token here too; /aggregate used to call
+	// them for anyone. (auth.ignorePathRegexes does not apply: it exempts paths, not services.)
+	var authErr error
+	authChecked := false
+	authorized := func() error {
+		if !authChecked {
+			authChecked = true
+			if a.auth == nil {
+				authErr = fmt.Errorf("authentication is not available for aggregation")
+			} else {
+				_, authErr = a.auth.Validate(c.Request())
+			}
+		}
+		return authErr
+	}
+
 	var wg sync.WaitGroup
 	results := make(map[string]*ServiceResponse)
 	resultsMu := sync.Mutex{}
 
 	// Use sync.WaitGroup for concurrent requests
 	for _, serviceName := range serviceNames {
-		serviceName = strings.TrimSpace(serviceName)
-		if serviceName == "" {
-			continue
+		if svcConfig, ok := a.serviceConfigs[serviceName]; ok && svcConfig.Authentication {
+			if err := authorized(); err != nil {
+				results[serviceName] = &ServiceResponse{
+					Service: serviceName,
+					Status:  http.StatusUnauthorized,
+					Error:   "Authentication required",
+				}
+				continue
+			}
 		}
 
 		wg.Add(1)
@@ -120,6 +179,13 @@ func (a *Aggregator) callService(ctx context.Context, c echo.Context, svc *confi
 		targetURL += "?" + c.Request().URL.RawQuery
 	}
 
+	timeout := svc.Timeout
+	if timeout <= 0 {
+		timeout = defaultCallTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, c.Request().Method, targetURL, nil)
 	if err != nil {
 		return &ServiceResponse{
@@ -129,8 +195,12 @@ func (a *Aggregator) callService(ctx context.Context, c echo.Context, svc *confi
 		}
 	}
 
-	// Copy headers
+	// Copy headers, except hop-by-hop ones
 	for k, v := range c.Request().Header {
+		switch http.CanonicalHeaderKey(k) {
+		case "Connection", "Keep-Alive", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade":
+			continue
+		}
 		req.Header[k] = v
 	}
 
@@ -144,7 +214,10 @@ func (a *Aggregator) callService(ctx context.Context, c echo.Context, svc *confi
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxAggregateBody+1))
+	if err == nil && len(respBody) > maxAggregateBody {
+		err = fmt.Errorf("response larger than %d bytes", maxAggregateBody)
+	}
 	if err != nil {
 		return &ServiceResponse{
 			Service: svc.Name,
@@ -235,7 +308,9 @@ func (a *Aggregator) fetchDependencyDataForEnrichment(ctx context.Context, dep c
 		paramValue, _ := getNestedValue(originalResponse, strings.Split(fromPath, "."))
 
 		if paramValue != nil {
-			targetURL = strings.ReplaceAll(targetURL, "{"+paramName+"}", fmt.Sprintf("%v", paramValue))
+			// Escape the value: it comes from a response body and must not add path segments
+			// or a query string to the dependency URL.
+			targetURL = strings.ReplaceAll(targetURL, "{"+paramName+"}", url.PathEscape(fmt.Sprintf("%v", paramValue)))
 		}
 	}
 

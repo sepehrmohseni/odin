@@ -3,8 +3,10 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"odin/pkg/admin"
@@ -48,6 +50,55 @@ type Gateway struct {
 
 func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway, error) {
 	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+
+	// Client IP: the connection's address unless the request came through a trusted proxy.
+	// (Echo's default believes X-Forwarded-For from anyone, so a client could pick its own IP.)
+	ipExtractor, err := newIPExtractor(cfg.Server.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+	e.IPExtractor = ipExtractor
+
+	// A panic in a handler or plugin becomes a 500 for that request instead of a dropped
+	// connection.
+	e.Use(echomw.RecoverWithConfig(echomw.RecoverConfig{
+		LogErrorFunc: func(c echo.Context, err error, stack []byte) error {
+			logger.WithError(err).WithField("path", c.Request().URL.Path).Errorf("panic recovered\n%s", stack)
+			return err
+		},
+		DisablePrintStack: true,
+	}))
+
+	// Bound request bodies on proxied routes. The admin has its own limits (plugin uploads are
+	// larger).
+	maxBody := cfg.Server.MaxBodySize
+	if maxBody == "" {
+		maxBody = "10M"
+	}
+	e.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
+		Limit: maxBody,
+		Skipper: func(c echo.Context) bool {
+			return strings.HasPrefix(c.Request().URL.Path, "/admin/")
+		},
+	}))
+
+	// JWT validation for services with authentication: true. Without a signing secret those
+	// services answer 503 instead of accepting tokens.
+	jwtValidator, err := auth.NewJWTValidator(cfg.Auth)
+	if err != nil {
+		return nil, err
+	}
+	authMiddleware := jwtValidator.Middleware()
+	if !jwtValidator.Configured() {
+		for _, svc := range cfg.Services {
+			if svc.Authentication {
+				logger.Errorf("Service %q requires authentication but no JWT secret is configured "+
+					"(auth.jwtSecret, ODIN_JWT_SECRET or auth_secrets.yaml); its requests will be rejected", svc.Name)
+			}
+		}
+	}
 
 	// Initialize distributed tracing
 	tracingConfig := tracing.Config{
@@ -74,6 +125,7 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	e.Use(middleware.MonitoringMiddleware())
 
 	agg := aggregator.New(logger, cfg.Services)
+	agg.SetAuthenticator(jwtValidator)
 
 	agg.RegisterRoutes(e)
 
@@ -99,6 +151,10 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 			LoadBalancing:  svcConfig.LoadBalancing,
 			Headers:        svcConfig.Headers,
 			Protocol:       svcConfig.Protocol,
+			CacheDisabled:  svcConfig.Cache != nil && svcConfig.Cache.Enabled != nil && !*svcConfig.Cache.Enabled,
+		}
+		if svcConfig.Cache != nil {
+			svc.CacheTTL = svcConfig.Cache.TTL
 		}
 
 		svc.Transform.Request = make([]service.TransformRule, len(svcConfig.Transform.Request))
@@ -381,7 +437,7 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 					CacheTTL:            svcConfig.GraphQL.CacheTTL,
 				}
 				graphqlProxy := graphql.NewProxy(graphqlConfig, logger)
-				graphqlProxy.RegisterRoutes(e, svcConfig.BasePath)
+				graphqlProxy.RegisterRoutes(e, svcConfig.BasePath, serviceAuth(svcConfig, authMiddleware)...)
 				logger.WithField("service", svcConfig.Name).Info("GraphQL proxy registered")
 			}
 		case "grpc":
@@ -399,7 +455,7 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 				if err != nil {
 					logger.WithError(err).Warnf("Failed to create gRPC proxy for service %s", svcConfig.Name)
 				} else {
-					grpcProxy.RegisterRoutes(e, svcConfig.BasePath)
+					grpcProxy.RegisterRoutes(e, svcConfig.BasePath, serviceAuth(svcConfig, authMiddleware)...)
 					logger.WithField("service", svcConfig.Name).Info("gRPC proxy registered")
 				}
 			}
@@ -408,7 +464,7 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 
 	logging.ConfigureLoggerLegacy(logger, cfg.Logging.Level, cfg.Logging.JSON)
 
-	health.Register(e, logger)
+	health.Register(e, logger, cfg.Server.DebugEndpoints)
 
 	// Start service mesh integration
 	if cfg.ServiceMesh.Enabled {
@@ -513,7 +569,6 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		logger.Info("Plugin middleware enabled")
 	}
 
-	authMiddleware := auth.NewJWTMiddleware(cfg.Auth)
 	router.SetAuthMiddleware(authMiddleware)
 
 	var cacheStore cache.Store
@@ -523,8 +578,8 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize cache: %w", err)
 		}
-		e.Use(middleware.CacheMiddleware(cacheStore, logger))
-		router.SetCacheStore(cacheStore)
+		// Per service, after authentication (see routing.Router).
+		router.SetCacheStore(cacheStore, cfg.Cache.TTL)
 	}
 
 	if err := router.RegisterRoutes(); err != nil {
@@ -550,6 +605,11 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	logger.Info("Monitoring metrics broadcaster started")
 
 	return gateway, nil
+}
+
+// Handler returns the gateway's HTTP handler, for tests or for embedding it in another server.
+func (g *Gateway) Handler() http.Handler {
+	return g.server
 }
 
 func (g *Gateway) Start() error {
@@ -595,4 +655,40 @@ func (g *Gateway) Shutdown(ctx context.Context) error {
 	}
 
 	return g.server.Shutdown(ctx)
+}
+
+// serviceAuth returns the authentication middleware for a service that requires it.
+func serviceAuth(svc config.ServiceConfig, authMiddleware echo.MiddlewareFunc) []echo.MiddlewareFunc {
+	if svc.Authentication {
+		return []echo.MiddlewareFunc{authMiddleware}
+	}
+	return nil
+}
+
+// newIPExtractor trusts X-Forwarded-For only from the configured proxies.
+func newIPExtractor(trusted []string) (echo.IPExtractor, error) {
+	if len(trusted) == 0 {
+		return echo.ExtractIPDirect(), nil
+	}
+	opts := []echo.TrustOption{
+		echo.TrustLoopback(false),
+		echo.TrustLinkLocal(false),
+		echo.TrustPrivateNet(false),
+	}
+	for _, entry := range trusted {
+		cidr := entry
+		if !strings.Contains(cidr, "/") {
+			if ip := net.ParseIP(cidr); ip != nil && ip.To4() != nil {
+				cidr += "/32"
+			} else {
+				cidr += "/128"
+			}
+		}
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			return nil, fmt.Errorf("server.trustedProxies: invalid entry %q: %w", entry, err)
+		}
+		opts = append(opts, echo.TrustIPRange(network))
+	}
+	return echo.ExtractIPFromXFFHeader(opts...), nil
 }

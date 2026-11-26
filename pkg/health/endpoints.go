@@ -76,7 +76,9 @@ func (c *Checker) Liveness() *Status {
 	}
 }
 
-func Register(e *echo.Echo, logger *logrus.Logger) {
+// Register adds /health, /ready and /live, and with debugEndpoints the /debug/* endpoints,
+// which list every route and should not be public.
+func Register(e *echo.Echo, logger *logrus.Logger, debugEndpoints bool) {
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{
 			"status": "UP",
@@ -96,6 +98,11 @@ func Register(e *echo.Echo, logger *logrus.Logger) {
 			"status": "alive",
 		})
 	})
+
+	if !debugEndpoints {
+		logger.Info("Health check endpoints registered (debug endpoints off; set server.debugEndpoints to enable)")
+		return
+	}
 
 	e.GET("/debug/routes", func(c echo.Context) error {
 		all := e.Routes()

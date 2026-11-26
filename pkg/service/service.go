@@ -29,6 +29,11 @@ type Config struct {
 	} `yaml:"transform"` // Legacy field, kept for backward compatibility
 	Aggregation *AggregationConfig `yaml:"aggregation,omitempty"`
 	HealthCheck *HealthCheckConfig `yaml:"healthCheck,omitempty"`
+
+	// CacheDisabled turns response caching off for this service; CacheTTL overrides the global
+	// cache TTL.
+	CacheDisabled bool          `yaml:"-"`
+	CacheTTL      time.Duration `yaml:"-"`
 }
 
 // TransformationConfig holds the new template-based transformation settings

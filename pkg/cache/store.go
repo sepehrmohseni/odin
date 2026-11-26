@@ -37,7 +37,7 @@ type RedisStore struct {
 
 func NewStore(config config.CacheConfig) (Store, error) {
 	switch config.Strategy {
-	case "local":
+	case "", "local", "memory":
 		return &LocalStore{
 			cache: cache.New(config.TTL, config.TTL*2),
 		}, nil
@@ -47,7 +47,9 @@ func NewStore(config config.CacheConfig) (Store, error) {
 			return nil, fmt.Errorf("invalid Redis URL: %w", err)
 		}
 		client := redis.NewClient(opts)
-		if err := client.Ping(context.Background()).Err(); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := client.Ping(ctx).Err(); err != nil {
 			return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 		}
 		return &RedisStore{
@@ -67,7 +69,10 @@ func (s *LocalStore) Get(key string) (interface{}, bool) {
 }
 
 func (s *LocalStore) Set(key string, value interface{}, ttl time.Duration) {
-	s.cache.Set(key, value, cache.DefaultExpiration)
+	if ttl <= 0 {
+		ttl = cache.DefaultExpiration
+	}
+	s.cache.Set(key, value, ttl)
 }
 
 func (s *LocalStore) Delete(key string) {

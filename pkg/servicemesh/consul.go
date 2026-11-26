@@ -130,10 +130,10 @@ func (c *ConsulMesh) GetHTTPClient() (*http.Client, error) {
 
 // InjectHeaders adds Consul-specific headers to the request
 func (c *ConsulMesh) InjectHeaders(headers http.Header) error {
-	// Add Consul trace headers
-	if headers.Get("X-Consul-Token") == "" && c.config.Consul.Token != "" {
-		headers.Set("X-Consul-Token", c.config.Consul.Token)
-	}
+	// The Consul ACL token authenticates the gateway to the Consul agent. It must never be
+	// added to proxied requests: these headers are forwarded to every upstream. (They used to
+	// carry it.) A token a client sent is dropped as well.
+	headers.Del("X-Consul-Token")
 
 	// Add request tracing
 	if headers.Get("X-Request-Id") == "" {

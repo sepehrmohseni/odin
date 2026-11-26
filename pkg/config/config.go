@@ -36,6 +36,14 @@ type ServerConfig struct {
 	WriteTimeout    time.Duration `yaml:"writeTimeout"`
 	GracefulTimeout time.Duration `yaml:"gracefulTimeout"`
 	Compression     bool          `yaml:"compression"`
+	// MaxBodySize limits request bodies on proxied routes, e.g. "10M" (default) or "512K".
+	MaxBodySize string `yaml:"maxBodySize"`
+	// TrustedProxies lists the proxy addresses or CIDRs whose X-Forwarded-For header is
+	// believed. With none, the client IP is the connection's address, so clients cannot spoof
+	// it to dodge rate limits or login throttling.
+	TrustedProxies []string `yaml:"trustedProxies"`
+	// DebugEndpoints exposes /debug/routes and friends. Off by default: they list every route.
+	DebugEndpoints bool `yaml:"debugEndpoints"`
 }
 
 type LoggingConfig struct {
@@ -48,6 +56,11 @@ type AuthConfig struct {
 	AccessTokenTTL    time.Duration `yaml:"accessTokenTTL"`
 	RefreshTokenTTL   time.Duration `yaml:"refreshTokenTTL"`
 	IgnorePathRegexes []string      `yaml:"ignorePathRegexes"`
+	// Issuer and Audience, when set, must match the token's iss and aud claims.
+	Issuer   string `yaml:"issuer"`
+	Audience string `yaml:"audience"`
+	// Leeway tolerates clock skew when checking exp, nbf and iat.
+	Leeway time.Duration `yaml:"leeway"`
 }
 
 type AdminConfig struct {
@@ -266,27 +279,35 @@ type AIConfig struct {
 }
 
 type ServiceConfig struct {
-	Name           string             `yaml:"name"`
-	BasePath       string             `yaml:"basePath"`
-	Targets        []string           `yaml:"targets"`
-	StripBasePath  bool               `yaml:"stripBasePath"`
-	Timeout        time.Duration      `yaml:"timeout"`
-	RetryCount     int                `yaml:"retryCount"`
-	RetryDelay     time.Duration      `yaml:"retryDelay"`
-	Authentication bool               `yaml:"authentication"`
-	LoadBalancing  string             `yaml:"loadBalancing"`
-	Headers        map[string]string  `yaml:"headers"`
-	Protocol       string             `yaml:"protocol"` // http, graphql, grpc
-	Transform      TransformConfig    `yaml:"transform"`
-	Aggregation    *AggregationConfig `yaml:"aggregation,omitempty"`
-	GraphQL        *GraphQLConfig     `yaml:"graphql,omitempty"`
-	GRPC           *GRPCConfig        `yaml:"grpc,omitempty"`
-	HealthCheck    *HealthCheckConfig `yaml:"healthCheck,omitempty"`
+	Name           string              `yaml:"name"`
+	BasePath       string              `yaml:"basePath"`
+	Targets        []string            `yaml:"targets"`
+	StripBasePath  bool                `yaml:"stripBasePath"`
+	Timeout        time.Duration       `yaml:"timeout"`
+	RetryCount     int                 `yaml:"retryCount"`
+	RetryDelay     time.Duration       `yaml:"retryDelay"`
+	Authentication bool                `yaml:"authentication"`
+	LoadBalancing  string              `yaml:"loadBalancing"`
+	Headers        map[string]string   `yaml:"headers"`
+	Protocol       string              `yaml:"protocol"` // http, graphql, grpc
+	Transform      TransformConfig     `yaml:"transform"`
+	Aggregation    *AggregationConfig  `yaml:"aggregation,omitempty"`
+	GraphQL        *GraphQLConfig      `yaml:"graphql,omitempty"`
+	GRPC           *GRPCConfig         `yaml:"grpc,omitempty"`
+	HealthCheck    *HealthCheckConfig  `yaml:"healthCheck,omitempty"`
+	Cache          *ServiceCacheConfig `yaml:"cache,omitempty"`
 
 	// Source is the file a service was loaded from when it is not the main config file (for
 	// example services.yaml). It is not part of the YAML; the admin uses it to avoid writing
 	// those services into config.yaml.
 	Source string `yaml:"-" json:"-"`
+}
+
+// ServiceCacheConfig tunes response caching for one service. Caching applies to every HTTP
+// service when cache.enabled is true; a service can opt out with enabled: false.
+type ServiceCacheConfig struct {
+	Enabled *bool         `yaml:"enabled,omitempty"`
+	TTL     time.Duration `yaml:"ttl,omitempty"`
 }
 
 type TransformConfig struct {

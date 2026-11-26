@@ -1,7 +1,10 @@
 package routing
 
 import (
+	"time"
+
 	"odin/pkg/cache"
+	"odin/pkg/middleware"
 	"odin/pkg/service"
 
 	"github.com/labstack/echo/v4"
@@ -13,7 +16,9 @@ type Router struct {
 	registry       *service.Registry
 	logger         *logrus.Logger
 	cacheStore     cache.Store
+	cacheTTL       time.Duration
 	authMiddleware echo.MiddlewareFunc
+	routeMW        []echo.MiddlewareFunc
 }
 
 func NewRouter(e *echo.Echo, registry *service.Registry, logger *logrus.Logger) *Router {
@@ -24,8 +29,15 @@ func NewRouter(e *echo.Echo, registry *service.Registry, logger *logrus.Logger) 
 	}
 }
 
-func (r *Router) SetCacheStore(store cache.Store) {
+// SetCacheStore enables response caching on HTTP service routes with the given default TTL.
+func (r *Router) SetCacheStore(store cache.Store, ttl time.Duration) {
 	r.cacheStore = store
+	r.cacheTTL = ttl
+}
+
+// Use adds middleware that runs on every service route, after authentication.
+func (r *Router) Use(mw ...echo.MiddlewareFunc) {
+	r.routeMW = append(r.routeMW, mw...)
 }
 
 func (r *Router) SetAuthMiddleware(middleware echo.MiddlewareFunc) {
@@ -58,9 +70,21 @@ func (r *Router) RegisterRoutes() error {
 		// Create route group
 		group := r.echo.Group(svc.BasePath)
 
-		// Apply authentication middleware if required
+		// Authentication runs first, so nothing below (including the cache) can answer an
+		// unauthenticated request.
 		if svc.Authentication && r.authMiddleware != nil {
 			group.Use(r.authMiddleware)
+		}
+		group.Use(r.routeMW...)
+		if r.cacheStore != nil && !svc.CacheDisabled {
+			ttl := r.cacheTTL
+			if svc.CacheTTL > 0 {
+				ttl = svc.CacheTTL
+			}
+			group.Use(middleware.NewResponseCache(r.cacheStore, middleware.ResponseCacheOptions{
+				TTL:       ttl,
+				KeyPrefix: svc.Name,
+			}, r.logger))
 		}
 
 		// Register routes

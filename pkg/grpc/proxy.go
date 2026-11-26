@@ -276,10 +276,12 @@ func (p *Proxy) grpcCodeToHTTPStatus(code codes.Code) int {
 }
 
 // RegisterRoutes registers gRPC proxy routes
-func (p *Proxy) RegisterRoutes(e *echo.Echo, basePath string) {
+// mw (for example the authentication middleware of a service with authentication: true) runs
+// before the handlers.
+func (p *Proxy) RegisterRoutes(e *echo.Echo, basePath string, mw ...echo.MiddlewareFunc) {
 	// Handle both GET and POST for different gRPC methods
-	e.POST(basePath+"/*", p.Handle)
-	e.GET(basePath+"/*", p.Handle)
+	e.POST(basePath+"/*", p.Handle, mw...)
+	e.GET(basePath+"/*", p.Handle, mw...)
 
 	// Health check for gRPC service
 	e.GET(basePath+"/health", func(c echo.Context) error {
@@ -289,7 +291,7 @@ func (p *Proxy) RegisterRoutes(e *echo.Echo, basePath string) {
 			"status":                "UP",
 			"grpc_connection_state": state.String(),
 		})
-	})
+	}, mw...)
 }
 
 // StreamHandler handles gRPC streaming (placeholder for future implementation)

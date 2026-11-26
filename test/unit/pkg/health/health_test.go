@@ -17,7 +17,7 @@ import (
 func TestHealthEndpoint(t *testing.T) {
 	e := echo.New()
 
-	health.Register(e, logrus.New())
+	health.Register(e, logrus.New(), false)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	rec := httptest.NewRecorder()
@@ -36,7 +36,7 @@ func TestHealthEndpoint(t *testing.T) {
 func TestDebugRoutesEndpoint(t *testing.T) {
 	e := echo.New()
 
-	health.Register(e, logrus.New())
+	health.Register(e, logrus.New(), true)
 
 	req := httptest.NewRequest("GET", "/debug/routes", nil)
 	rec := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestDebugRoutesEndpoint(t *testing.T) {
 func TestDebugConfigEndpoint(t *testing.T) {
 	e := echo.New()
 
-	health.Register(e, logrus.New())
+	health.Register(e, logrus.New(), true)
 
 	req := httptest.NewRequest("GET", "/debug/config", nil)
 	rec := httptest.NewRecorder()
@@ -68,7 +68,7 @@ func TestDebugConfigEndpoint(t *testing.T) {
 func TestDebugContentTypesEndpoint(t *testing.T) {
 	e := echo.New()
 
-	health.Register(e, logrus.New())
+	health.Register(e, logrus.New(), true)
 
 	req := httptest.NewRequest("GET", "/debug/content-types", nil)
 	rec := httptest.NewRecorder()
@@ -116,4 +116,19 @@ func TestLivenessCheck(t *testing.T) {
 	status := checker.Liveness()
 
 	assert.Equal(t, "alive", status.Status)
+}
+
+func TestDebugEndpointsOffByDefault(t *testing.T) {
+	e := echo.New()
+	health.Register(e, logrus.New(), false)
+
+	for _, path := range []string{"/debug/routes", "/debug/config", "/debug/content-types"} {
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		assert.Equal(t, http.StatusNotFound, rec.Code, path)
+	}
+
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest("GET", "/health", nil))
+	assert.Equal(t, http.StatusOK, rec.Code)
 }

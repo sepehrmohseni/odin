@@ -237,13 +237,14 @@ func (p *Proxy) validateQuery(query string) error {
 	return nil
 }
 
-// RegisterRoutes registers GraphQL proxy routes
-func (p *Proxy) RegisterRoutes(e *echo.Echo, basePath string) {
-	e.POST(basePath, p.Handle)
+// RegisterRoutes registers GraphQL proxy routes. mw (for example the authentication
+// middleware of a service with authentication: true) runs before the handler.
+func (p *Proxy) RegisterRoutes(e *echo.Echo, basePath string, mw ...echo.MiddlewareFunc) {
+	e.POST(basePath, p.Handle, mw...)
 	e.GET(basePath, func(c echo.Context) error {
 		// GraphQL Playground or similar can be served here
 		return c.JSON(http.StatusOK, map[string]string{
 			"message": "GraphQL endpoint is available at POST " + basePath,
 		})
-	})
+	}, mw...)
 }
