@@ -369,6 +369,11 @@ const OdinUI = (() => {
   };
 })();
 
+// Page scripts call these helpers by their plain names.
+window.showToast = OdinUI.showToast;
+window.formatDate = OdinUI.formatDate;
+window.escapeHtml = OdinUI.escapeHtml;
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = OdinUI;

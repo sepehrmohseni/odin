@@ -36,8 +36,21 @@ func (h *SettingsHandler) GetAllSettings(c echo.Context) error {
 
 // GetServerSettings returns server configuration
 func (h *SettingsHandler) GetServerSettings(c echo.Context) error {
+	configMu.Lock()
+	sc := h.config.Server
+	configMu.Unlock()
+	// The same names and duration strings that UpdateServerSettings accepts. (The raw struct
+	// came out as {"Port": 8080, "Timeout": 30000000000}, which the settings page could not read.)
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"server": h.config.Server,
+		"server": map[string]interface{}{
+			"port":            sc.Port,
+			"timeout":         durationString(sc.Timeout),
+			"readTimeout":     durationString(sc.ReadTimeout),
+			"writeTimeout":    durationString(sc.WriteTimeout),
+			"gracefulTimeout": durationString(sc.GracefulTimeout),
+			"compression":     sc.Compression,
+			"maxBodySize":     sc.MaxBodySize,
+		},
 	})
 }
 
@@ -105,8 +118,11 @@ func (h *SettingsHandler) UpdateServerSettings(c echo.Context) error {
 
 // GetLoggingSettings returns logging configuration
 func (h *SettingsHandler) GetLoggingSettings(c echo.Context) error {
+	configMu.Lock()
+	lc := h.config.Logging
+	configMu.Unlock()
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"logging": h.config.Logging,
+		"logging": map[string]interface{}{"level": lc.Level, "json": lc.JSON},
 	})
 }
 
@@ -146,8 +162,19 @@ func (h *SettingsHandler) UpdateLoggingSettings(c echo.Context) error {
 
 // GetRateLimitSettings returns rate limiting configuration
 func (h *SettingsHandler) GetRateLimitSettings(c echo.Context) error {
+	configMu.Lock()
+	rl := redactConfig(h.config).RateLimit
+	configMu.Unlock()
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"rateLimit": redactConfig(h.config).RateLimit,
+		"rateLimit": map[string]interface{}{
+			"enabled":    rl.Enabled,
+			"limit":      rl.Limit,
+			"duration":   durationString(rl.Duration),
+			"strategy":   rl.Strategy,
+			"algorithm":  rl.Algorithm,
+			"redisUrl":   rl.RedisURL,
+			"failClosed": rl.FailClosed,
+		},
 	})
 }
 
@@ -197,8 +224,17 @@ func (h *SettingsHandler) UpdateRateLimitSettings(c echo.Context) error {
 
 // GetCacheSettings returns cache configuration
 func (h *SettingsHandler) GetCacheSettings(c echo.Context) error {
+	configMu.Lock()
+	cc := redactConfig(h.config).Cache
+	configMu.Unlock()
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"cache": redactConfig(h.config).Cache,
+		"cache": map[string]interface{}{
+			"enabled":     cc.Enabled,
+			"ttl":         durationString(cc.TTL),
+			"strategy":    cc.Strategy,
+			"redisUrl":    cc.RedisURL,
+			"maxSizeInMB": cc.MaxSizeInMB,
+		},
 	})
 }
 
@@ -249,8 +285,11 @@ func (h *SettingsHandler) UpdateCacheSettings(c echo.Context) error {
 
 // GetMonitoringSettings returns monitoring configuration
 func (h *SettingsHandler) GetMonitoringSettings(c echo.Context) error {
+	configMu.Lock()
+	mc := h.config.Monitoring
+	configMu.Unlock()
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"monitoring": h.config.Monitoring,
+		"monitoring": map[string]interface{}{"enabled": mc.Enabled, "path": mc.Path, "webhookUrl": redactURL(mc.WebhookURL)},
 	})
 }
 
@@ -272,7 +311,7 @@ func (h *SettingsHandler) UpdateMonitoringSettings(c echo.Context) error {
 	// Update config
 	h.config.Monitoring.Enabled = req.Enabled
 	h.config.Monitoring.Path = req.Path
-	h.config.Monitoring.WebhookURL = req.WebhookURL
+	h.config.Monitoring.WebhookURL = keepSecretURL(req.WebhookURL, h.config.Monitoring.WebhookURL)
 
 	// Save to file
 	if err := h.saveConfig(); err != nil {
@@ -286,8 +325,19 @@ func (h *SettingsHandler) UpdateMonitoringSettings(c echo.Context) error {
 
 // GetTracingSettings returns tracing configuration
 func (h *SettingsHandler) GetTracingSettings(c echo.Context) error {
+	configMu.Lock()
+	tc := h.config.Tracing
+	configMu.Unlock()
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"tracing": h.config.Tracing,
+		"tracing": map[string]interface{}{
+			"enabled":        tc.Enabled,
+			"serviceName":    tc.ServiceName,
+			"serviceVersion": tc.ServiceVersion,
+			"environment":    tc.Environment,
+			"endpoint":       tc.Endpoint,
+			"sampleRate":     tc.SampleRate,
+			"insecure":       tc.Insecure,
+		},
 	})
 }
 
@@ -560,4 +610,13 @@ func (h *SettingsHandler) GetConfigAsJSON(c echo.Context) error {
 	}
 
 	return c.JSONBlob(http.StatusOK, data)
+}
+
+// durationString writes a duration as the settings forms and Update handlers expect it ("30s"),
+// or "" when it is not set.
+func durationString(d time.Duration) string {
+	if d == 0 {
+		return ""
+	}
+	return d.String()
 }

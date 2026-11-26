@@ -183,8 +183,18 @@ const OdinAPI = (() => {
     metrics: () => fetch('/metrics').then((r) => r.text()),
   };
 
+  // Shorthands the admin pages use (they called these, but only request existed).
+  const get = (url) => request(url);
+  const post = (url, body) => request(url, { method: 'POST', body: JSON.stringify(body || {}) });
+  const put = (url, body) => request(url, { method: 'PUT', body: JSON.stringify(body || {}) });
+  const del = (url) => request(url, { method: 'DELETE' });
+
   return {
     request,
+    get,
+    post,
+    put,
+    delete: del,
     plugins,
     services,
     postman,
