@@ -84,13 +84,13 @@ reach; **low** = hygiene.
 | COR-20 | medium | `pkg/multicluster/manager.go:79`, `:493` | The per-cluster TLS client is built and dropped; `affinityMap` is unsynchronised; stale services are never removed. Not wired in. | Fixed: `pkg/multicluster` rewritten without shared routing state (per-service failover or active cluster targets, health checks, per-cluster TLS, loop prevention) and wired in |
 | COR-21 | medium | `pkg/plugins/manager.go:369`, `:421`; `pkg/plugins/repository.go:41` vs `pkg/plugins/upload.go:77` | Hook slices are mutated in place while requests iterate them. Duplicate loads survive unload. The lock is held across plugin code. `post-request`/`pre-response` hooks never fire. Plugin HTTP errors become 500. Two schemas share the `plugins` collection, so uploaded plugins are not restored on boot. | Fixed: copy-on-write chain and hooks, all four hooks, `*echo.HTTPError` kept, uploads in `plugin_binaries` and restored on boot |
 | COR-22 | low | `pkg/wasm/middleware.go:129`, `:33` | `allowedUrls` never matched (shadowed variable); `service_id` assertion panics. Not wired in. | Fixed `7b6ad1c` |
-| COR-23 | medium | `cmd/odin/main.go:141` | SIGHUP logs "Configuration reloaded successfully" and applies nothing. | Honest message `27e9a6a`; live reload: [Later](../ROADMAP.md#later) |
+| COR-23 | medium | `cmd/odin/main.go:141` | SIGHUP logs "Configuration reloaded successfully" and applies nothing. | Honest message `27e9a6a`; live reload: [Next](../ROADMAP.md#6-reload-discovery-and-tls) |
 | COR-24 | low | `pkg/config/config.go:421` | `services.yaml` parse errors are ignored. The admin copies those services into `config.yaml` on every save (duplicates). Unknown YAML keys are silently ignored. | Fixed: `c07b7e1`; unknown keys logged with their line |
 | COR-25 | medium | `pkg/tracing/tracing.go:73` | A full URL is passed to `WithEndpoint` (host:port only), so the default config never exports. Trace context is not propagated upstream. | Fixed `448f76e`, `3688608` |
 | COR-26 | low | `pkg/cache/store.go:121`, `:70` | The Redis store returns a different type than the middleware expects (never hits); `Clear` pattern never matches; local TTLs are ignored. | Fixed `bc34392` |
 | COR-27 | low | `cmd/gateway/main.go:96`, `cmd/odin/main.go:118` | On a failed `Start` the process waits forever; shutdown errors are compared as strings. | Fixed `27e9a6a` |
-| COR-28 | low | `pkg/openapi/openapi.go:380` | `ToYAML` returns JSON; base paths are picked in random map order; `bearerAuth` is undefined. Not wired in. | Ordering fixed `7b6ad1c`; rest: [Later](../ROADMAP.md#later) |
-| COR-29 | low | `pkg/servicemesh/consul.go:98` (and Istio/Linkerd) | Service discovery is stubbed; the mTLS client is never used by the proxy. | Open: [Later](../ROADMAP.md#later) |
+| COR-28 | low | `pkg/openapi/openapi.go:380` | `ToYAML` returns JSON; base paths are picked in random map order; `bearerAuth` is undefined. Not wired in. | Fixed: the generator was rewritten (real YAML, sorted output, `bearerAuth` defined, no invented operations) and is served at `/openapi.json` |
+| COR-29 | low | `pkg/servicemesh/consul.go:98` (and Istio/Linkerd) | Service discovery is stubbed; the mTLS client is never used by the proxy. | Open: [Next](../ROADMAP.md#6-reload-discovery-and-tls) |
 
 ## Operations
 
@@ -112,7 +112,7 @@ reach; **low** = hygiene.
 | TST-01 | high | `.github/workflows/ci.yml` | Coverage was measured per test package, and all tests sit in `test/unit`, so `pkg/` coverage (9.5 %) was invisible; "80 %+" in the roadmap is not true. | CI measures `-coverpkg=./pkg/...` `7b6ad1c`; raising it: [Next](../ROADMAP.md#next) |
 | TST-02 | medium | `test/unit/pkg/ratelimit/limiter_test.go:142` | A test asserted the bug ("Changed expectation to match implementation"). | Fixed `90f0406` |
 | TST-03 | medium | `test/unit/pkg/plugins/validation_test.go:237` and `upload_test.go` | Plugin tests re-implement the logic locally instead of importing `pkg/plugins`. | Real tests added `3be5e10`; old ones: [Next](../ROADMAP.md#next) |
-| TST-04 | medium | none | No test exercised the request path end to end (auth, cache, proxy, limits). | `test/unit/pkg/gateway` added across `bc34392`..`27e9a6a` |
+| TST-04 | medium | none | No test exercised the request path end to end (auth, cache, proxy, limits). | Fixed: `test/unit/pkg/gateway` drives the whole gateway (added across `bc34392`..`27e9a6a`, extended since) |
 | TST-05 | low | `test/integration/` | README only; no integration tests. | Open: [Next](../ROADMAP.md#next) |
 
 ## Maintainability
