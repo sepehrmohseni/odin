@@ -1,0 +1,68 @@
+# Release binaries, archives, checksums and SBOMs for a version tag (vX.Y.Z). Run by
+# .github/workflows/release.yml; try it locally with:
+#   docker run --rm -v "$PWD:/src" -w /src goreleaser/goreleaser:v2.20.3 release --snapshot --clean
+version: 2
+
+project_name: odin
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: odin
+    main: ./cmd/odin
+    binary: odin
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.buildTime={{ .Date }}
+  - id: odin-migrate
+    main: ./cmd/migrate
+    binary: odin-migrate
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - config/default_config.yaml
+      - pkg/admin/templates/**/*
+      - pkg/admin/static/**/*
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Other changes
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
