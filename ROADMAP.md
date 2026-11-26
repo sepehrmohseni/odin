@@ -54,7 +54,6 @@ more.
 
 | Item | Finding | Effort |
 | --- | --- | --- |
-| Remove the committed sample JWTs; generate tokens at test time | [SEC-27](docs/AUDIT.md#security) | S |
 | Records: COR-28 (fixed by the OpenAPI rewrite), "What works today" | — | S |
 | Demo: retake the screenshots with the Anomalies page | — | S |
 | Release v0.2.0 (binaries, signed multi-arch image), then check it end to end | [OPS-07](docs/AUDIT.md#operations) | S |

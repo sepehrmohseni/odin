@@ -71,6 +71,9 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   running chain (they only changed the database record) and accept only the pipeline's phases;
   the API works without MongoDB. The unimplemented "compile" endpoint and the bulk
   enable/disable endpoints, which only flipped database flags, are removed (MNT-03).
+- `test/test-api-gateway.sh` signs a fresh token from `ODIN_JWT_SECRET` (or the quickstart's
+  `.env`) instead of carrying a committed sample token, and the Postman collection no longer
+  suggests an admin password (SEC-27).
 - Postman's Newman test runner works (SEC-26): it passed "-" as the collection, which Newman
   does not read, looked for the JSON report on standard output instead of its file, added
   `--insecure` when told not to allow insecure TLS (the option is now `Insecure`), and put

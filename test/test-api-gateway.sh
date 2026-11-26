@@ -14,9 +14,25 @@ PRODUCTS_URL="http://localhost:8083"
 ORDERS_URL="http://localhost:8084"
 CATEGORIES_URL="http://localhost:8085"
 
-# Sample JWT token - Replace this with an actual token for testing
-# You can generate one using the jwt-generator.go tool
-TOKEN="Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidXNyLTAwMSIsInVzZXJuYW1lIjoiam9obl9kb2UiLCJyb2xlIjoidXNlciIsImV4cCI6MTcxOTQ2MzkyOSwiaWF0IjoxNzE5NDYwMzI5fQ.WD6nbfa0K9VkFLEF9pWYZXQweQSU0IF6oKkdNULMpqE"
+# A token for the JWT-protected routes, signed now with ODIN_JWT_SECRET (or the quickstart's
+# .env); ODIN_TOKEN overrides it. (A sample token used to be committed here.)
+if [ -z "${ODIN_TOKEN:-}" ]; then
+  env_file="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+  if [ -z "${ODIN_JWT_SECRET:-}" ] && [ -f "$env_file" ]; then
+    ODIN_JWT_SECRET="$(sed -n 's/^ODIN_JWT_SECRET=//p' "$env_file" | tail -n 1)"
+  fi
+  if [ -n "${ODIN_JWT_SECRET:-}" ]; then
+    b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+    now=$(date +%s)
+    header=$(printf '{"alg":"HS256","typ":"JWT"}' | b64url)
+    payload=$(printf '{"sub":"usr-001","user_id":"usr-001","iat":%d,"exp":%d}' "$now" $((now + 3600)) | b64url)
+    signature=$(printf '%s.%s' "$header" "$payload" | openssl dgst -sha256 -hmac "$ODIN_JWT_SECRET" -binary | b64url)
+    ODIN_TOKEN="$header.$payload.$signature"
+  else
+    echo "No ODIN_JWT_SECRET (or .env): the JWT-protected calls will be rejected." >&2
+  fi
+fi
+TOKEN="Bearer ${ODIN_TOKEN:-}"
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}    Odin API Gateway Test Script    ${NC}"
 echo -e "${GREEN}=========================================${NC}"

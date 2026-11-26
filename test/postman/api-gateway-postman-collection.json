@@ -111,7 +111,7 @@
         },
         {
             "key": "admin_password",
-            "value": "admin123"
+            "value": ""
         },
         {
             "key": "token",
