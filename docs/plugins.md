@@ -74,7 +74,8 @@ Within a phase, plugins run by priority (lower first), then by name. Routes are 
 (`/admin`, `/health`, `/metrics`).
 
 A plugin that panics fails only that request, with a 500 and the plugin's name in the log.
-Enabling and disabling take effect on the next request, without a restart.
+Enabling and disabling take effect on the next request, without a restart. The admin's
+**Middleware** page shows the chain and changes a plugin's phase, priority and routes live.
 
 ### Enabling middleware plugins
 

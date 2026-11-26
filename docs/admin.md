@@ -42,6 +42,7 @@ admin:
 | Request log | The last 100 requests, filterable by path, service, status class and duration, each copyable as a curl command |
 | Add service, edit | Name, base path, targets, authentication, load balancing, timeout and retries |
 | Settings | Server, logging, rate-limit, cache, monitoring and tracing settings; config export and backups |
+| Middleware | The middleware plugin chain by phase; change a plugin's phase, priority or routes, take it out of the chain, or run it on a test request. Changes apply on the next request, and are saved with MongoDB |
 | Plugins | Plugin records, and uploads of Go plugin binaries (needs MongoDB) |
 | Postman | Postman collection sync (needs MongoDB) |
 

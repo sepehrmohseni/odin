@@ -125,8 +125,7 @@ function renderMiddlewareChain() {
   // Render phase-specific chains
   renderPhaseChain('pre-auth', 'preAuthChain');
   renderPhaseChain('post-auth', 'postAuthChain');
-  renderPhaseChain('pre-route', 'preRouteChain');
-  renderPhaseChain('post-route', 'postRouteChain');
+  renderPhaseChain('pre-proxy', 'preProxyChain');
 }
 
 // Render phase-specific chain
@@ -534,10 +533,9 @@ async function reloadAllMiddleware() {
 // Helper: Format phase name
 function formatPhase(phase) {
   const names = {
-    'pre-auth': 'Pre-Auth',
-    'post-auth': 'Post-Auth',
-    'pre-route': 'Pre-Route',
-    'post-route': 'Post-Route'
+    'pre-auth': 'Pre-auth',
+    'post-auth': 'Post-auth',
+    'pre-proxy': 'Pre-proxy'
   };
   return names[phase] || phase;
 }

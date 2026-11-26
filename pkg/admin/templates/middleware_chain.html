@@ -68,22 +68,17 @@
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" id="pre-auth-tab" data-bs-toggle="tab" data-bs-target="#pre-auth" type="button">
-      Pre-Auth
+      Pre-auth
     </button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" id="post-auth-tab" data-bs-toggle="tab" data-bs-target="#post-auth" type="button">
-      Post-Auth
+      Post-auth
     </button>
   </li>
   <li class="nav-item" role="presentation">
-    <button class="nav-link" id="pre-route-tab" data-bs-toggle="tab" data-bs-target="#pre-route" type="button">
-      Pre-Route
-    </button>
-  </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link" id="post-route-tab" data-bs-toggle="tab" data-bs-target="#post-route" type="button">
-      Post-Route
+    <button class="nav-link" id="pre-proxy-tab" data-bs-toggle="tab" data-bs-target="#pre-proxy" type="button">
+      Pre-proxy
     </button>
   </li>
 </ul>
@@ -115,8 +110,8 @@
   <div class="tab-pane fade" id="pre-auth" role="tabpanel">
     <div class="card">
       <div class="card-body">
-        <h5 class="card-title">Pre-Authentication Middleware</h5>
-        <p class="text-muted">Executed before authentication checks</p>
+        <h5 class="card-title">Pre-auth</h5>
+        <p class="text-muted">Before the service's JWT check: authentication plugins such as API keys</p>
         <div id="preAuthChain" class="middleware-chain-container"></div>
       </div>
     </div>
@@ -125,29 +120,19 @@
   <div class="tab-pane fade" id="post-auth" role="tabpanel">
     <div class="card">
       <div class="card-body">
-        <h5 class="card-title">Post-Authentication Middleware</h5>
-        <p class="text-muted">Executed after authentication is verified</p>
+        <h5 class="card-title">Post-auth</h5>
+        <p class="text-muted">After authentication, before the rate limit and the cache (the default)</p>
         <div id="postAuthChain" class="middleware-chain-container"></div>
       </div>
     </div>
   </div>
 
-  <div class="tab-pane fade" id="pre-route" role="tabpanel">
+  <div class="tab-pane fade" id="pre-proxy" role="tabpanel">
     <div class="card">
       <div class="card-body">
-        <h5 class="card-title">Pre-Routing Middleware</h5>
-        <p class="text-muted">Executed before route matching</p>
-        <div id="preRouteChain" class="middleware-chain-container"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-pane fade" id="post-route" role="tabpanel">
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title">Post-Routing Middleware</h5>
-        <p class="text-muted">Executed after route matching</p>
-        <div id="postRouteChain" class="middleware-chain-container"></div>
+        <h5 class="card-title">Pre-proxy</h5>
+        <p class="text-muted">After the rate limit and the cache, right before the request goes upstream; cache hits skip it</p>
+        <div id="preProxyChain" class="middleware-chain-container"></div>
       </div>
     </div>
   </div>
@@ -181,13 +166,11 @@
           <div class="mb-3">
             <label for="middlewarePhase" class="form-label">Execution Phase</label>
             <select class="form-select" id="middlewarePhase">
-              <option value="">Unassigned</option>
-              <option value="pre-auth">Pre-Authentication</option>
-              <option value="post-auth">Post-Authentication</option>
-              <option value="pre-route">Pre-Routing</option>
-              <option value="post-route">Post-Routing</option>
+              <option value="pre-auth">Pre-auth: before the JWT check</option>
+              <option value="post-auth" selected>Post-auth: after authentication (default)</option>
+              <option value="pre-proxy">Pre-proxy: right before the upstream</option>
             </select>
-            <div class="form-text">Optional: Categorize by execution phase</div>
+            <div class="form-text">Where in each service's pipeline it runs</div>
           </div>
 
           <div class="mb-3">
@@ -243,11 +226,9 @@
           <div class="mb-3">
             <label for="editMiddlewarePhase" class="form-label">Execution Phase</label>
             <select class="form-select" id="editMiddlewarePhase">
-              <option value="">Unassigned</option>
-              <option value="pre-auth">Pre-Authentication</option>
-              <option value="post-auth">Post-Authentication</option>
-              <option value="pre-route">Pre-Routing</option>
-              <option value="post-route">Post-Routing</option>
+              <option value="pre-auth">Pre-auth: before the JWT check</option>
+              <option value="post-auth" selected>Post-auth: after authentication (default)</option>
+              <option value="pre-proxy">Pre-proxy: right before the upstream</option>
             </select>
           </div>
 
@@ -377,10 +358,9 @@
   margin-right: 8px;
 }
 
-.phase-pre-auth { background: #fff3cd; color: #856404; }
-.phase-post-auth { background: #d1ecf1; color: #0c5460; }
-.phase-pre-route { background: #f8d7da; color: #721c24; }
-.phase-post-route { background: #d4edda; color: #155724; }
+.phase-pre-auth { background: var(--odin-warn-soft); color: var(--odin-warn); }
+.phase-post-auth { background: var(--odin-accent-soft); color: var(--odin-accent); }
+.phase-pre-proxy { background: var(--odin-ok-soft); color: var(--odin-ok); }
 
 .middleware-actions {
   display: flex;

@@ -239,6 +239,8 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		adminHandler.SetPluginHandler(pluginManager, pluginRepo)
 		logger.Info("Plugin admin panel initialized")
 	}
+	// The Middleware page shows and changes the live chain; with MongoDB, changes are saved.
+	adminHandler.SetMiddlewareAPIHandler(pluginManager, pluginRepo)
 
 	// Initialize plugin upload handler if MongoDB is available
 	if mongoRepo != nil {

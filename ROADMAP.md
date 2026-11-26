@@ -58,7 +58,7 @@ first. Effort: S = hours, M = a day or two, L = a week or more.
 | Warn about unknown config keys (strict decoding with fallback) | [COR-24](docs/AUDIT.md#correctness) | S | Noisy for existing configs at first |
 | Newman runner: temp file, JSON reporter, correct TLS flag, timeouts | [SEC-26](docs/AUDIT.md#security) | S | — |
 | Raise `pkg/` coverage (now measured; was 9.5 %) and replace tests that re-implement code | [TST-01](docs/AUDIT.md#tests), TST-03, TST-05 | M | — |
-| Wire in the remaining packages (wasm, multicluster, ai, admin `middleware_api`/`mongodb_api`/`ai_api`); proxy, debug and utils were removed as duplicates; errors and openapi are wired | [MNT-03](docs/AUDIT.md#maintainability) | L | Owner chose to wire them in |
+| Wire in the remaining packages (wasm, multicluster, ai, admin `mongodb_api`/`ai_api`); proxy, debug and utils were removed as duplicates; errors, openapi and the admin middleware API are wired | [MNT-03](docs/AUDIT.md#maintainability) | L | Owner chose to wire them in |
 
 ## Later
 

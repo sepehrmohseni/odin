@@ -41,6 +41,10 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `post-request` and `pre-response` hooks fire; an `*echo.HTTPError` from a plugin keeps its
   status (COR-21).
 - Enabled uploaded plugins are activated again at startup.
+- The admin's Middleware page works: its API was never mounted. Phase changes now apply to the
+  running chain (they only changed the database record) and accept only the pipeline's phases;
+  the API works without MongoDB. The unimplemented "compile" endpoint and the bulk
+  enable/disable endpoints, which only flipped database flags, are removed (MNT-03).
 - The admin's Settings page shows and saves the real settings: the API returned raw structs
   (`{"Port": 8080, "Timeout": 30000000000}`) and the page called helpers that did not exist, so
   every field was empty (COR-12, in part). Masked secrets are kept on save.
