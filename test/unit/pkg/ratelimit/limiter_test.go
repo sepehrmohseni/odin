@@ -125,22 +125,23 @@ func TestLimiter_CheckLimit_FixedWindow(t *testing.T) {
 	key := "test-key"
 	ctx := context.Background()
 
-	// For local testing without Redis, the implementation returns consistent values
-	// First request - should be allowed
+	// Without Redis the limiter keeps counts in memory (it used to allow everything).
 	limitInfo1, allowed1 := limiter.CheckLimit(ctx, key, rule)
 	assert.True(t, allowed1)
 	assert.Equal(t, 2, limitInfo1.Limit)
-	assert.Equal(t, 1, limitInfo1.Remaining) // Implementation returns limit - 1
+	assert.Equal(t, 1, limitInfo1.Remaining)
 
-	// Second request - should be allowed (same key returns same result without Redis)
 	limitInfo2, allowed2 := limiter.CheckLimit(ctx, key, rule)
 	assert.True(t, allowed2)
-	assert.Equal(t, 1, limitInfo2.Remaining) // Same as above without Redis storage
+	assert.Equal(t, 0, limitInfo2.Remaining)
 
-	// Since we don't have Redis, all requests will be allowed in the current implementation
 	limitInfo3, allowed3 := limiter.CheckLimit(ctx, key, rule)
-	assert.True(t, allowed3) // Changed expectation to match implementation
-	assert.Equal(t, 1, limitInfo3.Remaining)
+	assert.False(t, allowed3, "the third request exceeds a limit of 2")
+	assert.Equal(t, 0, limitInfo3.Remaining)
+
+	// Other keys have their own count.
+	_, allowedOther := limiter.CheckLimit(ctx, "other-key", rule)
+	assert.True(t, allowedOther)
 }
 
 func TestLimiter_MatchesRule(t *testing.T) {
@@ -256,4 +257,45 @@ func TestLimiter_IPMatching(t *testing.T) {
 			assert.Equal(t, tt.expectMatch, matches)
 		})
 	}
+}
+
+func TestLimiter_LocalAlgorithms(t *testing.T) {
+	ctx := context.Background()
+	for _, algo := range []ratelimit.Algorithm{
+		ratelimit.AlgorithmFixedWindow, ratelimit.AlgorithmSlidingWindow, ratelimit.AlgorithmTokenBucket,
+	} {
+		t.Run(string(algo), func(t *testing.T) {
+			limiter, err := ratelimit.NewLimiter(ratelimit.Config{Algorithm: algo}, logrus.New())
+			require.NoError(t, err)
+			rule := &ratelimit.Rule{Limit: 3, Window: time.Hour}
+
+			for i := 0; i < 3; i++ {
+				_, ok := limiter.CheckLimit(ctx, "k", rule)
+				assert.True(t, ok, "request %d", i+1)
+			}
+			_, ok := limiter.CheckLimit(ctx, "k", rule)
+			assert.False(t, ok, "over the limit")
+		})
+	}
+}
+
+func TestLimiter_SubSecondWindowAndRecovery(t *testing.T) {
+	ctx := context.Background()
+	limiter, err := ratelimit.NewLimiter(ratelimit.Config{Algorithm: ratelimit.AlgorithmTokenBucket}, logrus.New())
+	require.NoError(t, err)
+	rule := &ratelimit.Rule{Limit: 2, Window: 100 * time.Millisecond} // used to divide by zero
+
+	limiter.CheckLimit(ctx, "k", rule)
+	limiter.CheckLimit(ctx, "k", rule)
+	_, ok := limiter.CheckLimit(ctx, "k", rule)
+	assert.False(t, ok)
+
+	assert.Eventually(t, func() bool {
+		_, ok := limiter.CheckLimit(ctx, "k", rule)
+		return ok
+	}, time.Second, 10*time.Millisecond, "tokens refill")
+
+	fixed, err := ratelimit.NewLimiter(ratelimit.Config{Algorithm: ratelimit.AlgorithmFixedWindow}, logrus.New())
+	require.NoError(t, err)
+	assert.NotPanics(t, func() { fixed.CheckLimit(ctx, "k", &ratelimit.Rule{Limit: 1, Window: 10 * time.Millisecond}) })
 }

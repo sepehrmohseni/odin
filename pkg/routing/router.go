@@ -20,6 +20,12 @@ type Router struct {
 	authMiddleware echo.MiddlewareFunc
 	routeMW        []echo.MiddlewareFunc
 	healthy        func(target string) bool
+	rateLimiter    func(svc *service.Config) echo.MiddlewareFunc
+}
+
+// SetRateLimiter supplies the rate-limit middleware for a service (nil for none).
+func (r *Router) SetRateLimiter(fn func(svc *service.Config) echo.MiddlewareFunc) {
+	r.rateLimiter = fn
 }
 
 // SetHealthCheck lets service handlers skip targets that fail their health checks.
@@ -81,6 +87,11 @@ func (r *Router) RegisterRoutes() error {
 			group.Use(r.authMiddleware)
 		}
 		group.Use(r.routeMW...)
+		if r.rateLimiter != nil {
+			if mw := r.rateLimiter(svc); mw != nil {
+				group.Use(mw)
+			}
+		}
 		if r.cacheStore != nil && !svc.CacheDisabled {
 			ttl := r.cacheTTL
 			if svc.CacheTTL > 0 {

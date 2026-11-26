@@ -213,7 +213,9 @@ func (cb *CircuitBreaker) onFailure(state State, now time.Time) {
 	cb.counts.ConsecutiveFailures++
 	cb.counts.ConsecutiveSuccesses = 0
 
-	if cb.readyToTrip(cb.counts) {
+	// A failed trial request in half-open goes straight back to open. (Counts restart at zero
+	// in half-open, so readyToTrip's minimum-requests check kept it half-open instead.)
+	if state == StateHalfOpen || cb.readyToTrip(cb.counts) {
 		cb.setState(StateOpen, now)
 	}
 }

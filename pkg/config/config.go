@@ -89,8 +89,12 @@ type RateLimitConfig struct {
 	Enabled  bool          `yaml:"enabled"`
 	Limit    int           `yaml:"limit"`
 	Duration time.Duration `yaml:"duration"`
-	Strategy string        `yaml:"strategy"`
+	Strategy string        `yaml:"strategy"` // local (default) or redis
 	RedisURL string        `yaml:"redisUrl"`
+	// Algorithm is fixed_window (default), sliding_window or token_bucket.
+	Algorithm string `yaml:"algorithm"`
+	// FailClosed rejects requests when Redis is unreachable instead of allowing them.
+	FailClosed bool `yaml:"failClosed"`
 }
 
 type CacheConfig struct {
@@ -279,28 +283,51 @@ type AIConfig struct {
 }
 
 type ServiceConfig struct {
-	Name           string              `yaml:"name"`
-	BasePath       string              `yaml:"basePath"`
-	Targets        []string            `yaml:"targets"`
-	StripBasePath  bool                `yaml:"stripBasePath"`
-	Timeout        time.Duration       `yaml:"timeout"`
-	RetryCount     int                 `yaml:"retryCount"`
-	RetryDelay     time.Duration       `yaml:"retryDelay"`
-	Authentication bool                `yaml:"authentication"`
-	LoadBalancing  string              `yaml:"loadBalancing"`
-	Headers        map[string]string   `yaml:"headers"`
-	Protocol       string              `yaml:"protocol"` // http, graphql, grpc
-	Transform      TransformConfig     `yaml:"transform"`
-	Aggregation    *AggregationConfig  `yaml:"aggregation,omitempty"`
-	GraphQL        *GraphQLConfig      `yaml:"graphql,omitempty"`
-	GRPC           *GRPCConfig         `yaml:"grpc,omitempty"`
-	HealthCheck    *HealthCheckConfig  `yaml:"healthCheck,omitempty"`
-	Cache          *ServiceCacheConfig `yaml:"cache,omitempty"`
+	Name           string                  `yaml:"name"`
+	BasePath       string                  `yaml:"basePath"`
+	Targets        []string                `yaml:"targets"`
+	StripBasePath  bool                    `yaml:"stripBasePath"`
+	Timeout        time.Duration           `yaml:"timeout"`
+	RetryCount     int                     `yaml:"retryCount"`
+	RetryDelay     time.Duration           `yaml:"retryDelay"`
+	Authentication bool                    `yaml:"authentication"`
+	LoadBalancing  string                  `yaml:"loadBalancing"`
+	Headers        map[string]string       `yaml:"headers"`
+	Protocol       string                  `yaml:"protocol"` // http, graphql, grpc
+	Transform      TransformConfig         `yaml:"transform"`
+	Aggregation    *AggregationConfig      `yaml:"aggregation,omitempty"`
+	GraphQL        *GraphQLConfig          `yaml:"graphql,omitempty"`
+	GRPC           *GRPCConfig             `yaml:"grpc,omitempty"`
+	HealthCheck    *HealthCheckConfig      `yaml:"healthCheck,omitempty"`
+	Cache          *ServiceCacheConfig     `yaml:"cache,omitempty"`
+	RateLimit      *ServiceRateLimitConfig `yaml:"rateLimit,omitempty"`
+	CircuitBreaker *CircuitBreakerConfig   `yaml:"circuitBreaker,omitempty"`
 
 	// Source is the file a service was loaded from when it is not the main config file (for
 	// example services.yaml). It is not part of the YAML; the admin uses it to avoid writing
 	// those services into config.yaml.
 	Source string `yaml:"-" json:"-"`
+}
+
+// ServiceRateLimitConfig sets a service's own rate limit. When rateLimit.enabled is true every
+// service gets the global limit; enabled: false exempts a service, and limit/window override.
+type ServiceRateLimitConfig struct {
+	Enabled *bool         `yaml:"enabled,omitempty"`
+	Limit   int           `yaml:"limit,omitempty"`
+	Window  time.Duration `yaml:"window,omitempty"`
+}
+
+// CircuitBreakerConfig stops sending requests to a target that keeps failing. A target's
+// circuit opens when, within interval, at least minRequests were made and failureRatio of them
+// failed (transport error or 5xx); after timeout, up to maxRequests trial requests are let
+// through, and one failure re-opens it.
+type CircuitBreakerConfig struct {
+	Enabled      bool          `yaml:"enabled"`
+	FailureRatio float64       `yaml:"failureRatio"` // default 0.5
+	MinRequests  uint32        `yaml:"minRequests"`  // default 10
+	Interval     time.Duration `yaml:"interval"`     // default 60s
+	Timeout      time.Duration `yaml:"timeout"`      // default 30s
+	MaxRequests  uint32        `yaml:"maxRequests"`  // default 1
 }
 
 // ServiceCacheConfig tunes response caching for one service. Caching applies to every HTTP

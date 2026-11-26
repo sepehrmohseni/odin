@@ -34,6 +34,22 @@ type Config struct {
 	// cache TTL.
 	CacheDisabled bool          `yaml:"-"`
 	CacheTTL      time.Duration `yaml:"-"`
+
+	// RateLimit requests per RateLimitWindow per client; 0 means no limit.
+	RateLimit       int           `yaml:"-"`
+	RateLimitWindow time.Duration `yaml:"-"`
+
+	// CircuitBreaker, when set, trips per target.
+	CircuitBreaker *CircuitBreakerSettings `yaml:"-"`
+}
+
+// CircuitBreakerSettings mirrors config.CircuitBreakerConfig with defaults applied.
+type CircuitBreakerSettings struct {
+	FailureRatio float64
+	MinRequests  uint32
+	Interval     time.Duration
+	Timeout      time.Duration
+	MaxRequests  uint32
 }
 
 // TransformationConfig holds the new template-based transformation settings

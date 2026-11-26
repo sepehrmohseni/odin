@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCircuitBreaker_Execute(t *testing.T) {
@@ -110,4 +111,26 @@ func TestCircuitBreakerManager(t *testing.T) {
 	// Get status should return info for all breakers
 	status := manager.GetBreakerStatus()
 	assert.Contains(t, status, "service1")
+}
+
+func TestCircuitBreaker_HalfOpenFailureReopens(t *testing.T) {
+	cb := circuit.NewCircuitBreaker("test", circuit.Config{
+		MaxRequests:  1,
+		Timeout:      50 * time.Millisecond,
+		FailureRatio: 0.5,
+		MinRequests:  3,
+	}, logrus.New())
+
+	fail := func() (interface{}, error) { return nil, errors.New("boom") }
+	for i := 0; i < 3; i++ {
+		_, _ = cb.Execute(fail)
+	}
+	require.Equal(t, circuit.StateOpen, cb.State())
+
+	time.Sleep(70 * time.Millisecond)
+	require.Equal(t, circuit.StateHalfOpen, cb.State())
+
+	// One failed trial is enough to open again, even though it is below minRequests.
+	_, _ = cb.Execute(fail)
+	assert.Equal(t, circuit.StateOpen, cb.State())
 }

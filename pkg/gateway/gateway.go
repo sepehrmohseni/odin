@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"odin/pkg/admin"
 	"odin/pkg/aggregator"
@@ -22,6 +23,7 @@ import (
 	"odin/pkg/mongodb"
 	"odin/pkg/monitoring"
 	"odin/pkg/plugins"
+	"odin/pkg/ratelimit"
 	"odin/pkg/routing"
 	"odin/pkg/service"
 	"odin/pkg/servicemesh"
@@ -42,6 +44,7 @@ type Gateway struct {
 	pluginManager   *plugins.PluginManager
 	tracingManager  *tracing.Manager
 	healthCheckers  []*health.TargetChecker
+	rateLimiter     *ratelimit.Limiter
 	alertManager    *health.AlertManager
 	meshManager     *servicemesh.Manager
 	mongoRepo       mongodb.Repository
@@ -154,6 +157,10 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		}
 		if svcConfig.Cache != nil {
 			svc.CacheTTL = svcConfig.Cache.TTL
+		}
+		svc.RateLimit, svc.RateLimitWindow = serviceRateLimit(cfg.RateLimit, svcConfig.RateLimit)
+		if cb := svcConfig.CircuitBreaker; cb != nil && cb.Enabled {
+			svc.CircuitBreaker = circuitSettings(cb)
 		}
 
 		svc.Transform.Request = make([]service.TransformRule, len(svcConfig.Transform.Request))
@@ -544,8 +551,20 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		monitoring.Register(e, cfg.Monitoring.Path)
 	}
 
-	if cfg.RateLimit.Enabled {
-		// Initialize rate limiter
+	// Rate limiting, per service and client (user when authenticated, else IP). It used to
+	// stop at logging "Rate limiting enabled".
+	limiter, err := newRateLimiter(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize rate limiting: %w", err)
+	}
+	if limiter != nil {
+		gateway.rateLimiter = limiter
+		router.SetRateLimiter(func(svc *service.Config) echo.MiddlewareFunc {
+			if svc.RateLimit <= 0 {
+				return nil
+			}
+			return limiter.ServiceMiddleware(svc.Name, svc.RateLimit, svc.RateLimitWindow)
+		})
 		logger.Info("Rate limiting enabled")
 	}
 
@@ -616,6 +635,12 @@ func (g *Gateway) Start() error {
 }
 
 func (g *Gateway) Shutdown(ctx context.Context) error {
+	if g.rateLimiter != nil {
+		if err := g.rateLimiter.Close(); err != nil {
+			g.logger.WithError(err).Warn("Error closing the rate limiter")
+		}
+	}
+
 	g.logger.Info("Stopping health monitoring...")
 	for _, checker := range g.healthCheckers {
 		checker.Stop()
@@ -681,4 +706,97 @@ func newIPExtractor(trusted []string) (echo.IPExtractor, error) {
 		opts = append(opts, echo.TrustIPRange(network))
 	}
 	return echo.ExtractIPFromXFFHeader(opts...), nil
+}
+
+// serviceRateLimit resolves a service's limit: the global one when rateLimit.enabled, unless the
+// service opts out or sets its own limit/window.
+func serviceRateLimit(global config.RateLimitConfig, svc *config.ServiceRateLimitConfig) (int, time.Duration) {
+	limit, window := 0, global.Duration
+	if global.Enabled {
+		limit = global.Limit
+	}
+	if svc != nil {
+		if svc.Enabled != nil && !*svc.Enabled {
+			return 0, 0
+		}
+		if svc.Limit > 0 {
+			limit = svc.Limit
+		}
+		if svc.Window > 0 {
+			window = svc.Window
+		}
+	}
+	if window <= 0 {
+		window = time.Minute
+	}
+	return limit, window
+}
+
+// newRateLimiter builds the shared limiter when any service is rate limited.
+func newRateLimiter(cfg *config.Config, logger *logrus.Logger) (*ratelimit.Limiter, error) {
+	needed := false
+	for _, svc := range cfg.Services {
+		if limit, _ := serviceRateLimit(cfg.RateLimit, svc.RateLimit); limit > 0 {
+			needed = true
+		}
+	}
+	if !needed {
+		return nil, nil
+	}
+
+	algorithm := ratelimit.Algorithm(cfg.RateLimit.Algorithm)
+	switch algorithm {
+	case "":
+		algorithm = ratelimit.AlgorithmFixedWindow
+	case ratelimit.AlgorithmFixedWindow, ratelimit.AlgorithmSlidingWindow, ratelimit.AlgorithmTokenBucket:
+	default:
+		return nil, fmt.Errorf("rateLimit.algorithm: unknown algorithm %q", algorithm)
+	}
+
+	rlConfig := ratelimit.Config{
+		Enabled:       true,
+		Algorithm:     algorithm,
+		DefaultLimit:  cfg.RateLimit.Limit,
+		DefaultWindow: cfg.RateLimit.Duration,
+		FailClosed:    cfg.RateLimit.FailClosed,
+		LogViolations: true,
+	}
+	switch cfg.RateLimit.Strategy {
+	case "", "local", "memory":
+	case "redis":
+		if cfg.RateLimit.RedisURL == "" {
+			return nil, fmt.Errorf("rateLimit.strategy is redis but rateLimit.redisUrl is empty")
+		}
+		rlConfig.Redis.URL = cfg.RateLimit.RedisURL
+	default:
+		return nil, fmt.Errorf("rateLimit.strategy: unknown strategy %q (want local or redis)", cfg.RateLimit.Strategy)
+	}
+	return ratelimit.NewLimiter(rlConfig, logger)
+}
+
+// circuitSettings applies the circuit breaker defaults.
+func circuitSettings(cb *config.CircuitBreakerConfig) *service.CircuitBreakerSettings {
+	s := &service.CircuitBreakerSettings{
+		FailureRatio: cb.FailureRatio,
+		MinRequests:  cb.MinRequests,
+		Interval:     cb.Interval,
+		Timeout:      cb.Timeout,
+		MaxRequests:  cb.MaxRequests,
+	}
+	if s.FailureRatio <= 0 || s.FailureRatio > 1 {
+		s.FailureRatio = 0.5
+	}
+	if s.MinRequests == 0 {
+		s.MinRequests = 10
+	}
+	if s.Interval <= 0 {
+		s.Interval = time.Minute
+	}
+	if s.Timeout <= 0 {
+		s.Timeout = 30 * time.Second
+	}
+	if s.MaxRequests == 0 {
+		s.MaxRequests = 1
+	}
+	return s
 }

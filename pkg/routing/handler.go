@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"odin/pkg/canary"
+	"odin/pkg/circuit"
 	"odin/pkg/service"
 	"odin/pkg/tracing"
 	"odin/pkg/transform"
@@ -47,7 +48,11 @@ type ServiceHandler struct {
 	canaryRouter    *canary.Router
 	transformEngine *transform.Engine
 	healthy         func(string) bool
+	breakers        map[string]*circuit.CircuitBreaker // per target, when configured
 }
+
+// errUpstream5xx marks a 5xx response as a failure for the circuit breaker.
+var errUpstream5xx = errors.New("upstream returned a server error")
 
 // NewServiceHandler validates the service's targets and prepares its upstream transport.
 func NewServiceHandler(svc *service.Config, logger *logrus.Logger, opts HandlerOptions) (*ServiceHandler, error) {
@@ -77,6 +82,22 @@ func NewServiceHandler(svc *service.Config, logger *logrus.Logger, opts HandlerO
 		healthy = func(string) bool { return true }
 	}
 
+	var breakers map[string]*circuit.CircuitBreaker
+	if cb := svc.CircuitBreaker; cb != nil {
+		breakers = make(map[string]*circuit.CircuitBreaker, len(targets))
+		for t := range targets {
+			breakers[t] = circuit.NewCircuitBreaker(svc.Name+" "+t, circuit.Config{
+				MaxRequests:  cb.MaxRequests,
+				Interval:     cb.Interval,
+				Timeout:      cb.Timeout,
+				FailureRatio: cb.FailureRatio,
+				MinRequests:  cb.MinRequests,
+				// The client giving up is not the upstream's fault.
+				IsSuccessful: func(err error) bool { return err == nil || errors.Is(err, context.Canceled) },
+			}, logger)
+		}
+	}
+
 	return &ServiceHandler{
 		service:         svc,
 		logger:          logger,
@@ -85,6 +106,7 @@ func NewServiceHandler(svc *service.Config, logger *logrus.Logger, opts HandlerO
 		canaryRouter:    canary.NewRouter(),
 		transformEngine: transform.NewEngine(logger),
 		healthy:         healthy,
+		breakers:        breakers,
 	}, nil
 }
 
@@ -155,7 +177,7 @@ func (h *ServiceHandler) Handle(c echo.Context) error {
 			"attempt": attempt + 1,
 		}).Debug("Forwarding request")
 
-		resp, lastErr = h.transport.RoundTrip(outReq)
+		resp, lastErr = h.roundTrip(target, outReq)
 		if lastErr != nil {
 			if ctx.Err() != nil {
 				return nil // the client went away
@@ -216,7 +238,45 @@ func retryableStatus(code int) bool {
 	return code == http.StatusBadGateway || code == http.StatusServiceUnavailable || code == http.StatusGatewayTimeout
 }
 
+// roundTrip sends one attempt, through the target's circuit breaker when there is one.
+func (h *ServiceHandler) roundTrip(target string, req *http.Request) (*http.Response, error) {
+	cb := h.breakers[target]
+	if cb == nil {
+		return h.transport.RoundTrip(req)
+	}
+	var resp *http.Response
+	_, err := cb.Execute(func() (interface{}, error) {
+		r, err := h.transport.RoundTrip(req)
+		if err != nil {
+			return nil, err
+		}
+		resp = r
+		if r.StatusCode >= http.StatusInternalServerError {
+			return nil, errUpstream5xx
+		}
+		return nil, nil
+	})
+	if errors.Is(err, errUpstream5xx) {
+		return resp, nil
+	}
+	return resp, err
+}
+
+// available reports whether a target may be tried: healthy, and its circuit not open.
+func (h *ServiceHandler) available(target string) bool {
+	if !h.healthy(target) {
+		return false
+	}
+	if cb := h.breakers[target]; cb != nil && cb.State() == circuit.StateOpen {
+		return false
+	}
+	return true
+}
+
 func upstreamError(err error) error {
+	if errors.Is(err, circuit.ErrCircuitOpen) || errors.Is(err, circuit.ErrTooManyRequests) {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "Service temporarily unavailable (circuit open)")
+	}
 	var netErr net.Error
 	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
 		return echo.NewHTTPError(http.StatusGatewayTimeout, "Upstream timed out")
@@ -245,7 +305,7 @@ func (h *ServiceHandler) selectTarget(req *http.Request, tried map[string]bool) 
 
 	pick := make([]string, 0, len(candidates))
 	for _, t := range candidates {
-		if !tried[t] && h.healthy(t) {
+		if !tried[t] && h.available(t) {
 			pick = append(pick, t)
 		}
 	}
