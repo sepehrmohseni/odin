@@ -78,3 +78,6 @@ coverage.html
 docker-compose.override.yml
 
 # End of https://www.toptal.com/developers/gitignore/api/go,node
+# Documentation site build output
+_site/
+site/

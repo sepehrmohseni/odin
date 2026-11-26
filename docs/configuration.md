@@ -1,118 +1,96 @@
-# Configuration Guide
+# Configuration
 
-Odin API Gateway is configured using YAML files stored in the `config/` directory.
+Odin is configured with one YAML file, and optionally a `services.yaml` next to it. Start the
+gateway with `odin -config path/to/config.yaml`. Every key is listed in the
+[configuration reference](reference/configuration.md), which is generated from the code; this
+page shows how the pieces fit together.
 
-## Core Configuration
-
-The main configuration file (`config.yaml`) defines the gateway's behavior:
+## A complete example
 
 ```yaml
 server:
-  port: 8080 # API gateway port
-  readTimeout: 5s # HTTP read timeout
-  writeTimeout: 10s # HTTP write timeout
-  gracefulTimeout: 15s # Graceful shutdown timeout
-  compression: true # Enable response compression
+  port: 8080
+  readTimeout: 30s
+  writeTimeout: 60s
+  maxBodySize: 10M
+  trustedProxies: [10.0.0.0/8]     # your load balancer, so X-Forwarded-For is believed
 
 logging:
-  level: info # Logging level (debug, info, warn, error)
-  json: false # Use JSON format for logs
-
-auth:
-  jwtSecret: 'your-secret' # JWT secret for token validation
-  accessTokenTTL: 1h # Access token time-to-live
-  refreshTokenTTL: 24h # Refresh token time-to-live
-  ignorePathRegexes: # Paths to exclude from authentication
-    - ^/health$
-    - ^/metrics$
-    - ^/api/public/.*$
-
-rateLimit:
-  enabled: true # Enable rate limiting
-  limit: 100 # Requests per duration
-  duration: 1m # Rate limit window
-  strategy: local # Strategy (local, redis)
-  redisUrl: 'redis://localhost:6379'
-
-cache:
-  enabled: true # Enable response caching
-  ttl: 5m # Cache time-to-live
-  strategy: local # Strategy (local, redis)
-  maxSizeInMB: 100 # Maximum cache size (local strategy)
-  redisUrl: 'redis://localhost:6379'
+  level: info
+  json: true
 
 monitoring:
-  enabled: true # Enable Prometheus metrics
-  path: /metrics # Metrics endpoint
+  enabled: true
+  path: /metrics
+
+auth:
+  jwtSecret: ${ODIN_JWT_SECRET}    # from the environment
+  issuer: https://auth.example.com
+  ignorePathRegexes: [^/health$, ^/metrics$]
+
+rateLimit:
+  enabled: true
+  limit: 600
+  duration: 1m
+  strategy: redis
+  redisUrl: redis://redis:6379/0
+
+cache:
+  enabled: true
+  ttl: 30s
+  strategy: redis
+  redisUrl: redis://redis:6379/1
 
 admin:
-  enabled: true # Enable admin interface
-  username: admin # Admin username
-  password: admin # Admin password (change this!)
-```
+  enabled: true
+  username: admin
+  passwordHash: ${ODIN_ADMIN_PASSWORD_HASH}   # bcrypt
 
-## Service Configuration
-
-Service configurations define how API requests are routed to backend services.
-
-```yaml
 services:
-  - name: users # Service name
-    basePath: /api/users # Base path for routing
-    stripBasePath: true # Remove base path when forwarding
-    targets: # Backend service URLs
-      - http://users-service:8081
-      - http://users-service-replica:8081
-    timeout: 5s # Request timeout
-    retryCount: 3 # Retry count on failures
-    retryDelay: 100ms # Delay between retries
-    authentication: true # Require authentication
-    loadBalancing: round-robin # Load balancing strategy
+  - name: products
+    basePath: /api/products
+    targets: [http://products-1:8080, http://products-2:8080]
+    timeout: 10s
+    healthCheck: {enabled: true, path: /health, interval: 10s}
+    circuitBreaker: {enabled: true}
 
-    # HTTP headers to add to forwarded requests
-    headers:
-      X-Source: odin-gateway
-      X-Version: 1.0
-
-    # Transform requests and responses
-    transform:
-      request:
-        - from: $.user.id # Source field (JSONPath)
-          to: $.userId # Target field
-          default: 'anonymous' # Default value if source missing
-      response:
-        - from: $.data # Source field
-          to: $.users # Target field
-
-    # Data aggregation configuration
-    aggregation:
-      dependencies:
-        - service: products # Service to query
-          path: /api/products/by-user/{userId}
-          # Map source data to path parameters
-          parameterMapping:
-            - from: $.id
-              to: userId
-          # Map response data to final response
-          resultMapping:
-            - from: $
-              to: $.products
+  - name: orders
+    basePath: /api/orders
+    targets: [http://orders:8080]
+    authentication: true
+    cache: {enabled: false}
+    rateLimit: {limit: 60, window: 1m}
 ```
 
-## Reloading Configuration
+## Environment variables
 
-Configuration can be reloaded without restarting the gateway:
+Anywhere in the file, `${NAME}` is replaced with the variable `NAME` and `${NAME:-fallback}` with
+its value or the fallback. An unset `${NAME}` without a fallback stops startup and names the
+variable. Comment lines are not expanded, and a bare `$` (as in bcrypt hashes) is left alone;
+write `$${` for a literal `${`.
 
-1. Through the admin interface
-2. By sending a SIGHUP signal to the process
-3. Using the API endpoint: `POST /admin/config/reload`
+Some settings can also be set directly:
 
-## Environment Variables
+| Variable | Overrides |
+| --- | --- |
+| `ODIN_JWT_SECRET` | `auth.jwtSecret` |
+| `ODIN_ADMIN_USERNAME`, `ODIN_ADMIN_PASSWORD`, `ODIN_ADMIN_PASSWORD_HASH` | `admin.username`, `admin.password`, `admin.passwordHash` |
+| `GATEWAY_PORT` | `server.port` |
+| `LOG_LEVEL` | `logging.level` (until the file is loaded) |
 
-Configuration values can be overridden using environment variables:
+A file named `auth_secrets.yaml` (`jwtSecret: ...`) in `config/`, `/etc/odin/` or `~/.odin/`
+takes precedence over the environment for the JWT secret, and `admin_creds.yaml` likewise for
+the admin login.
 
-- `GATEWAY_PORT`: Override server port
-- `GATEWAY_LOG_LEVEL`: Override log level
-- `ODIN_JWT_SECRET`: Override JWT secret
+## Splitting services out
 
-For more information, see the [Environment Variables Guide](environment-variables.md).
+Services in `services.yaml` (same directory as the main file, `services:` at the top) are added
+to those in the main file. The admin interface never rewrites `services.yaml`; services defined
+there are read-only in the admin.
+
+## Validation
+
+At startup Odin rejects: a port outside 1-65535, services without a name, base path or targets,
+targets that are not `http(s)://host[:port]`, invalid `auth.ignorePathRegexes`, an unknown
+`rateLimit.algorithm` or `rateLimit.strategy`, and unparsable `services.yaml`. Keys that are not
+part of the schema are ignored, so check spelling against the reference.

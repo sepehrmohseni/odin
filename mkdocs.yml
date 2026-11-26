@@ -1,0 +1,133 @@
+# Documentation site, published to GitHub Pages by .github/workflows/docs.yml.
+# Preview locally:  docker run --rm -p 8000:8000 -v "$PWD:/docs" squidfunk/mkdocs-material:9.8.2
+# Build (as CI):    docker run --rm -v "$PWD:/docs" squidfunk/mkdocs-material:9.8.2 build --strict
+
+site_name: Odin API Gateway
+site_description: An API gateway in Go with authentication, rate limiting, caching, resilience and observability.
+site_url: https://sepehrmohseni.github.io/odin/
+repo_url: https://github.com/sepehrmohseni/odin
+repo_name: sepehrmohseni/odin
+edit_uri: edit/main/docs/
+copyright: MIT licensed
+
+strict: true
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+# Only the pages in the nav are published; the older status reports in docs/ stay in the
+# repository.
+exclude_docs: |
+  /*.md
+  !/index.md
+  !/getting-started.md
+  !/concepts.md
+  !/configuration.md
+  !/traffic.md
+  !/security.md
+  !/caching.md
+  !/transformations.md
+  !/protocols.md
+  !/observability.md
+  !/admin.md
+  !/plugins.md
+  !/deployment.md
+  !/AUDIT.md
+  !/roadmap.md
+  !/changelog.md
+  !/contributing.md
+  examples/
+  images/
+  design/
+
+hooks:
+  - tools/mkdocs_hooks.py
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Concepts: concepts.md
+  - Guides:
+      - Configuration: configuration.md
+      - Routing and resilience: traffic.md
+      - Security: security.md
+      - Caching: caching.md
+      - Transformations: transformations.md
+      - WebSocket, SSE and GraphQL: protocols.md
+      - Observability: observability.md
+      - Admin interface: admin.md
+      - Plugins: plugins.md
+      - Deployment: deployment.md
+  - Reference:
+      - Configuration keys: reference/configuration.md
+      - Command line: reference/cli.md
+  - Project:
+      - Roadmap: roadmap.md
+      - Audit: AUDIT.md
+      - Changelog: changelog.md
+      - Contributing: contributing.md
+
+theme:
+  name: material
+  language: en
+  font:
+    text: IBM Plex Sans
+    code: IBM Plex Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Dark theme
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Light theme
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.tracking
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+
+extra_css:
+  - stylesheets/site.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/sepehrmohseni/odin

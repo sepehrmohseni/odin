@@ -1,139 +1,69 @@
-# Deployment Guide
+# Deployment
 
-This guide covers different deployment options for Odin API Gateway.
+## Docker
 
-## Docker Deployment
-
-### Single Container
-
-The simplest way to deploy Odin is using Docker:
+The image (`Dockerfile`) is a static binary on Alpine, runs as uid 65532, and has a health check
+that runs `odin -healthcheck`. It is built for `linux/amd64` and `linux/arm64`. Releases publish
+it to `ghcr.io/sepehrmohseni/odin`, signed with keyless cosign, with an SBOM and provenance.
 
 ```bash
-# Build the Docker image
-docker build -t odin-gateway:latest .
-
-# Run the container
-docker run -p 8080:8080 -p 8081:8081 -v $(pwd)/config:/app/config odin-gateway:latest
+docker run --rm -p 8080:8080 \
+  -v "$PWD/config.yaml:/app/config/config.yaml:ro" \
+  -e ODIN_JWT_SECRET="$(openssl rand -hex 32)" \
+  ghcr.io/sepehrmohseni/odin:0.1.0
 ```
 
-Environment variables can be passed to override configuration:
+Without a mounted config, the image serves only `/health` and `/metrics`. The image cannot load
+Go plugins, which need cgo.
+
+Verify an image signature:
 
 ```bash
-docker run -p 8080:8080 \
-  -e LOG_LEVEL=debug \
-  -e GATEWAY_PORT=8080 \
-  -e ODIN_JWT_SECRET=your-secret-key \
-  -v $(pwd)/config:/app/config \
-  odin-gateway:latest
+cosign verify ghcr.io/sepehrmohseni/odin:0.1.0 \
+  --certificate-identity-regexp 'https://github.com/sepehrmohseni/odin/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-### Docker Compose
+## Docker Compose
 
-For a complete environment with Redis, Prometheus, and Grafana:
+- **Development** (`docker-compose.yml`): Odin with Redis, MongoDB and four demo backends, every
+  container health-checked; `scripts/quickstart.sh` sets it up. Optional profiles:
+  `observability` (Prometheus, Grafana) and `ai`.
+- **Single host** (`deployments/docker/docker-compose.prod.yml`): Odin with your config and Redis,
+  with a read-only root filesystem.
+
+## Kubernetes with Helm
 
 ```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f odin
+helm install odin deployments/helm/odin \
+  --set secrets.jwtSecret="$(openssl rand -hex 32)" \
+  --set config.gateway.trustedProxies='{10.0.0.0/8}' \
+  --set-json 'services=[{"name":"api","basePath":"/api","targets":["http://api.default.svc:80"]}]'
 ```
 
-The `docker-compose.yml` file in the root directory includes:
+The chart runs non-root with a read-only root filesystem, keeps the JWT secret and admin password
+in a Secret (or `secrets.existingSecret`), probes `/live` and `/ready`, restarts pods when the
+config changes, and offers an Ingress, a HorizontalPodAutoscaler and a Prometheus Operator
+ServiceMonitor. All values are listed in the chart's README.
 
-- Odin API Gateway
-- Redis (for caching and rate limiting)
-- Prometheus (for metrics collection)
-- Grafana (for metrics visualization)
+For several replicas, use `strategy: redis` for rate limits and caching so all of them share one
+state.
 
-## Kubernetes Deployment
+## Binaries
 
-### Prerequisites
-
-- Kubernetes cluster (v1.19+)
-- kubectl configured to connect to your cluster
-- Optional: Helm for chart-based deployment
-
-### Deploying with kubectl
-
-1. Create ConfigMap and Secret:
+Release archives for Linux and macOS (amd64 and arm64) contain `odin`, `odin-migrate`, the admin
+templates and assets, and the default config. Run `odin` from the unpacked directory, because the
+admin interface reads its templates relative to the working directory:
 
 ```bash
-# Create a ConfigMap for configuration
-kubectl create configmap odin-config \
-  --from-file=config.yaml=./config/config.yaml \
-  --from-file=services.yaml=./config/services.yaml
-
-# Create Secret for sensitive data
-kubectl create secret generic odin-secrets \
-  --from-literal=jwt-secret=your-jwt-secret-here
+tar xzf odin_0.1.0_linux_amd64.tar.gz && cd odin_0.1.0_linux_amd64
+./odin -config config/default_config.yaml
 ```
 
-2. Apply Kubernetes manifests:
+## Production checklist
 
-```bash
-kubectl apply -f deployments/kubernetes/deployment.yaml
-kubectl apply -f deployments/kubernetes/service.yaml
-```
-
-3. Create Ingress (optional):
-
-```bash
-kubectl apply -f deployments/kubernetes/ingress.yaml
-```
-
-### Deploying with Helm (Coming Soon)
-
-We're working on a Helm chart to simplify Kubernetes deployments. Check back soon!
-
-## Production Considerations
-
-### High Availability
-
-For production deployments, consider:
-
-1. Running multiple replicas (at least 2-3 for high availability)
-2. Using a load balancer for distributing traffic
-3. Implementing health checks and auto-healing
-4. Setting appropriate resource limits and requests
-
-### Persistent Configuration
-
-For production, store your configuration in a persistent medium:
-
-1. ConfigMaps and Secrets in Kubernetes
-2. Environment variables for critical settings
-3. Redis or a database for dynamic configuration
-
-### TLS/SSL Configuration
-
-In production, always use TLS:
-
-1. Configure TLS certificates (Let's Encrypt or your own certs)
-2. Use a secure ingress or load balancer with TLS termination
-3. Ensure internal communication is also encrypted when necessary
-
-### Resource Requirements
-
-Minimum recommended resources:
-
-- 1 CPU core
-- 512MB RAM
-- 1GB disk space
-
-For high-traffic environments:
-
-- 2-4 CPU cores
-- 1-2GB RAM
-- Separate Redis instance with appropriate resources
-
-## Troubleshooting Deployments
-
-Common issues and solutions:
-
-1. **Gateway not starting**: Check logs with `docker logs` or `kubectl logs`
-2. **Cannot connect to services**: Verify network connectivity and service discovery
-3. **High latency**: Check resource utilization and consider scaling
-4. **Authentication failures**: Verify JWT secret configuration
-
-For more help, check the logs or open an issue on GitHub.
+- Set `ODIN_JWT_SECRET` (or `auth.jwtSecret`) if any service has `authentication: true`.
+- List your load balancer in `server.trustedProxies`.
+- Keep the admin off, or protect it with `admin.passwordHash` and expose it only internally.
+- Use Redis for rate limits and caching when running more than one instance.
+- Scrape `/metrics` and alert on `api_gateway_requests_total{status=~"5.."}`.

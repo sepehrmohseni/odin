@@ -1,0 +1,119 @@
+/* Odin docs: neutral ink, one accent colour, plain typography. */
+
+:root,
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #16181d;
+  --md-primary-fg-color--light: #3a3f4b;
+  --md-primary-fg-color--dark: #0b0c0f;
+  --md-primary-bg-color: #f5f6f8;
+  --md-accent-fg-color: #0b6e7a;
+  --md-accent-fg-color--transparent: rgba(11, 110, 122, 0.1);
+  --md-typeset-a-color: #0b6e7a;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 225;
+  --md-primary-fg-color: #101217;
+  --md-primary-fg-color--light: #2a2e38;
+  --md-primary-fg-color--dark: #08090c;
+  --md-accent-fg-color: #4fc3cf;
+  --md-accent-fg-color--transparent: rgba(79, 195, 207, 0.12);
+  --md-typeset-a-color: #6fd0da;
+}
+
+.md-header,
+.md-tabs {
+  box-shadow: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.md-typeset {
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.md-typeset h1 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset h2 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 2em;
+}
+
+.md-typeset h3 {
+  font-weight: 600;
+}
+
+.md-typeset code {
+  font-size: 0.86em;
+}
+
+.md-typeset table:not([class]) {
+  font-size: 0.76rem;
+}
+
+.md-typeset table:not([class]) th {
+  font-weight: 600;
+  background: var(--md-default-fg-color--lightest);
+}
+
+/* Landing page */
+.md-typeset .lede {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  max-width: 38rem;
+  color: var(--md-default-fg-color--light);
+  margin: 0 0 1.4rem;
+}
+
+.md-typeset .md-button {
+  border-radius: 4px;
+  font-weight: 500;
+  padding: 0.5em 1.1em;
+}
+
+.md-typeset .columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.4rem 1.6rem;
+}
+
+.md-typeset .columns > div > p:first-child {
+  margin-top: 0.6rem;
+}
+
+.md-typeset .status {
+  border-left: 3px solid var(--md-accent-fg-color);
+  padding: 0.2rem 0 0.2rem 0.9rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Buttons: the primary one uses the accent, the secondary one an outline in the text colour. */
+.md-typeset .md-button {
+  color: var(--md-default-fg-color);
+  border-color: var(--md-default-fg-color--lighter);
+}
+
+.md-typeset .md-button:hover,
+.md-typeset .md-button:focus {
+  color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  background: transparent;
+}
+
+.md-typeset .md-button--primary,
+.md-typeset .md-button--primary:hover,
+.md-typeset .md-button--primary:focus {
+  color: #fff;
+  background: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .md-button--primary,
+[data-md-color-scheme="slate"] .md-typeset .md-button--primary:hover {
+  color: #0b0c0f;
+}
