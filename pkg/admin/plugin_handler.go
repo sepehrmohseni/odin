@@ -15,15 +15,24 @@ import (
 
 // PluginHandler handles plugin-related admin API requests
 type PluginHandler struct {
-	manager *plugins.PluginManager
-	repo    *plugins.PluginRepository
+	manager    *plugins.PluginManager
+	repo       *plugins.PluginRepository
+	pluginsDir string // where uploaded and built plugins are stored
 }
+
+// DefaultPluginsDir is where the admin stores uploaded and built plugins when plugins.directory
+// is not set.
+const DefaultPluginsDir = "/var/odin/plugins"
+
+// maxPluginUpload caps plugin upload requests.
+const maxPluginUpload = 100 << 20
 
 // NewPluginHandler creates a new plugin handler
 func NewPluginHandler(manager *plugins.PluginManager, repo *plugins.PluginRepository) *PluginHandler {
 	return &PluginHandler{
-		manager: manager,
-		repo:    repo,
+		manager:    manager,
+		repo:       repo,
+		pluginsDir: DefaultPluginsDir,
 	}
 }
 
@@ -123,6 +132,12 @@ func (h *PluginHandler) createPlugin(c echo.Context) error {
 			"error": "Name and BinaryPath are required",
 		})
 	}
+	if err := plugins.ValidatePluginName(plugin.Name); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	if err := h.manager.CheckPluginPath(plugin.BinaryPath); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
 
 	// Save to database
 	if err := h.repo.SavePlugin(context.Background(), &plugin); err != nil {
@@ -155,6 +170,11 @@ func (h *PluginHandler) updatePlugin(c echo.Context) error {
 
 	// Ensure name matches
 	plugin.Name = name
+	if plugin.BinaryPath != "" {
+		if err := h.manager.CheckPluginPath(plugin.BinaryPath); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
+	}
 
 	// Update in database
 	if err := h.repo.UpdatePlugin(context.Background(), &plugin); err != nil {

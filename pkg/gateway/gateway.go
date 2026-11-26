@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"odin/pkg/admin"
@@ -187,8 +188,17 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		mongoRepo = nil
 	}
 
-	// Initialize plugin manager
+	// Initialize plugin manager. Plugins load only from the plugins directory, the admin's
+	// upload directory and the directories of plugins named in the config file, so a path
+	// stored in MongoDB or sent to the admin API cannot point at an arbitrary file.
 	pluginManager := plugins.NewPluginManager(logger)
+	allowedPluginDirs := []string{cfg.Plugins.Directory, admin.DefaultPluginsDir}
+	for _, p := range cfg.Plugins.Plugins {
+		if p.Path != "" {
+			allowedPluginDirs = append(allowedPluginDirs, filepath.Dir(p.Path))
+		}
+	}
+	pluginManager.SetAllowedDirs(allowedPluginDirs...)
 
 	// Initialize plugin repository if MongoDB is available
 	var pluginRepo *plugins.PluginRepository

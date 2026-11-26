@@ -20,6 +20,8 @@ import (
 
 // uploadPlugin handles plugin binary file uploads
 func (h *PluginHandler) uploadPlugin(c echo.Context) error {
+	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxPluginUpload)
+
 	// Parse multipart form
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -43,15 +45,18 @@ func (h *PluginHandler) uploadPlugin(c echo.Context) error {
 		})
 	}
 
-	// Validate file extension
+	// Validate file extension and name (the name becomes the file name)
 	if !strings.HasSuffix(file.Filename, ".so") {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Only .so files are allowed",
 		})
 	}
+	if err := plugins.ValidatePluginName(plugin.Name); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
 
 	// Create plugins directory if it doesn't exist
-	pluginsDir := "/var/odin/plugins"
+	pluginsDir := h.pluginsDir
 	if err := os.MkdirAll(pluginsDir, 0o750); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to create plugins directory: %v", err),
@@ -67,18 +72,33 @@ func (h *PluginHandler) uploadPlugin(c echo.Context) error {
 	}
 	defer src.Close()
 
-	binaryPath := filepath.Join(pluginsDir, fmt.Sprintf("%s.so", plugin.Name))
-	dst, err := os.Create(binaryPath)
+	// Write to a temporary file first and validate it without loading it; only a valid plugin
+	// is moved into place. Renaming also avoids truncating a .so that is already loaded.
+	binaryPath := filepath.Join(pluginsDir, plugin.Name+".so")
+	dst, err := os.CreateTemp(pluginsDir, ".upload-*.so")
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to create destination file: %v", err),
 		})
 	}
-	defer dst.Close()
+	tmpPath := dst.Name()
+	defer func() { _ = os.Remove(tmpPath) }() // no-op after the rename
 
-	if _, err := io.Copy(dst, src); err != nil {
+	_, copyErr := io.Copy(dst, src)
+	closeErr := dst.Close()
+	if copyErr != nil || closeErr != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("Failed to save file: %v", err),
+			"error": "Failed to save file",
+		})
+	}
+	if err := plugins.NewHookPluginValidator().ValidatePlugin(tmpPath, plugin.Name); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("Plugin validation failed: %v", err),
+		})
+	}
+	if err := os.Rename(tmpPath, binaryPath); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("Failed to store plugin: %v", err),
 		})
 	}
 
@@ -129,21 +149,25 @@ func (h *PluginHandler) buildPlugin(c echo.Context) error {
 		})
 	}
 
-	// Validate required fields
+	// Validate required fields. The name is used in paths and in the generated source, so only
+	// safe characters (a name such as "../.." made the cleanup below remove "/").
 	if req.Name == "" || req.Template == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Name and template are required",
 		})
 	}
+	if err := plugins.ValidatePluginName(req.Name); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
 
-	// Create build directory
-	buildDir := filepath.Join(os.TempDir(), "odin-plugin-build", req.Name)
-	if err := os.MkdirAll(buildDir, 0o750); err != nil {
+	// Create a private build directory
+	buildDir, err := os.MkdirTemp("", "odin-plugin-build-")
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to create build directory: %v", err),
 		})
 	}
-	defer os.RemoveAll(buildDir)
+	defer func() { _ = os.RemoveAll(buildDir) }()
 
 	// Generate plugin source code based on template
 	sourceCode, err := generatePluginCode(req.Name, req.Template, req.PluginType, req.Hooks)
@@ -179,7 +203,7 @@ require (
 	}
 
 	// Build plugin
-	pluginsDir := "/var/odin/plugins"
+	pluginsDir := h.pluginsDir
 	if err := os.MkdirAll(pluginsDir, 0o750); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Failed to create plugins directory: %v", err),

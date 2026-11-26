@@ -125,6 +125,9 @@ func (h *AdminHandler) SetCacheStore(store interface{ Clear() }) {
 // SetPluginHandler sets the plugin handler for admin
 func (h *AdminHandler) SetPluginHandler(pluginManager *plugins.PluginManager, pluginRepo *plugins.PluginRepository) {
 	h.pluginHandler = NewPluginHandler(pluginManager, pluginRepo)
+	if h.config.Plugins.Directory != "" {
+		h.pluginHandler.pluginsDir = h.config.Plugins.Directory
+	}
 }
 
 // SetMiddlewareAPIHandler sets the middleware API handler for admin

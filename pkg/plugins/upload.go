@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -97,9 +98,10 @@ func NewPluginUploader(db *mongo.Database, logger *logrus.Logger) (*PluginUpload
 		logger.WithError(err).Warn("Failed to create indexes for plugins collection")
 	}
 
-	// Create temporary upload directory
-	uploadDir := filepath.Join(os.TempDir(), "odin-plugin-uploads")
-	if err := os.MkdirAll(uploadDir, 0o750); err != nil {
+	// A private (0700), unpredictable directory for uploads in progress. A fixed shared path
+	// such as /tmp/odin-plugin-uploads could be pre-created or symlinked by another local user.
+	uploadDir, err := os.MkdirTemp("", "odin-plugin-uploads-")
+	if err != nil {
 		return nil, fmt.Errorf("failed to create upload directory: %w", err)
 	}
 
@@ -115,6 +117,10 @@ func NewPluginUploader(db *mongo.Database, logger *logrus.Logger) (*PluginUpload
 
 // UploadPlugin handles plugin file upload
 func (pu *PluginUploader) UploadPlugin(c echo.Context) error {
+	// Cap the request before the multipart form is parsed: FormFile spools the whole body to
+	// memory and disk, so checking file.Size afterwards does not stop a huge upload.
+	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, pu.maxSize+1<<20)
+
 	// Parse multipart form
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -131,12 +137,15 @@ func (pu *PluginUploader) UploadPlugin(c echo.Context) error {
 	priority := c.FormValue("priority")
 	phase := c.FormValue("phase")
 
-	// Get config (JSON string)
+	// Get config (a JSON object)
 	configStr := c.FormValue("config")
 	config := make(map[string]interface{})
 	if configStr != "" {
-		// Parse JSON config (simplified for now)
-		config["raw"] = configStr
+		if err := json.Unmarshal([]byte(configStr), &config); err != nil {
+			return c.JSON(400, map[string]interface{}{
+				"error": "config must be a JSON object: " + err.Error(),
+			})
+		}
 	}
 
 	// Get routes (comma-separated)
@@ -149,11 +158,16 @@ func (pu *PluginUploader) UploadPlugin(c echo.Context) error {
 		}
 	}
 
-	// Validate input
+	// Validate input. Name and version end up in file paths, so only safe characters.
 	if name == "" || version == "" {
 		return c.JSON(400, map[string]interface{}{
 			"error": "Name and version are required",
 		})
+	}
+	for _, v := range []string{name, version} {
+		if err := ValidatePluginName(v); err != nil {
+			return c.JSON(400, map[string]interface{}{"error": err.Error()})
+		}
 	}
 
 	// Validate file
@@ -191,17 +205,17 @@ func (pu *PluginUploader) UploadPlugin(c echo.Context) error {
 	}
 	defer src.Close()
 
-	// Save to temporary location for validation
-	tempPath := filepath.Join(pu.uploadDir, fmt.Sprintf("%s-%s-%d.so", name, version, time.Now().Unix()))
-	dst, err := os.Create(tempPath)
+	// Save to a fresh temporary file for validation
+	dst, err := os.CreateTemp(pu.uploadDir, "upload-*.so")
 	if err != nil {
 		pu.logger.WithError(err).Error("Failed to create temporary file")
 		return c.JSON(500, map[string]interface{}{
 			"error": "Failed to save file",
 		})
 	}
-	defer dst.Close()
-	defer os.Remove(tempPath) // Clean up temp file
+	tempPath := dst.Name()
+	defer func() { _ = dst.Close() }()
+	defer func() { _ = os.Remove(tempPath) }() // Clean up temp file
 
 	// Copy file and calculate hash
 	hash := sha256.New()

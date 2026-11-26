@@ -3,8 +3,10 @@ package plugins
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"plugin"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/labstack/echo/v4"
@@ -103,6 +105,55 @@ type PluginManager struct {
 	rollback        *MiddlewareRollback
 	logger          *logrus.Logger
 	mu              sync.RWMutex
+
+	// allowedDirs, when set, are the only directories plugin binaries are loaded from.
+	allowedDirs []string
+}
+
+// SetAllowedDirs restricts LoadPlugin and LoadMiddleware to binaries inside dirs. Paths stored
+// in the database or sent to the admin API could otherwise point at any file on the host.
+func (pm *PluginManager) SetAllowedDirs(dirs ...string) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.allowedDirs = pm.allowedDirs[:0]
+	for _, d := range dirs {
+		if d == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(d); err == nil {
+			pm.allowedDirs = append(pm.allowedDirs, filepath.Clean(abs))
+		}
+	}
+}
+
+// CheckPluginPath reports whether path may be loaded under the configured allowed directories.
+func (pm *PluginManager) CheckPluginPath(path string) error {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return pm.checkPathLocked(path)
+}
+
+func (pm *PluginManager) checkPathLocked(path string) error {
+	if len(pm.allowedDirs) == 0 {
+		return nil
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("invalid plugin path %q: %w", path, err)
+	}
+	// Resolve symlinks so a link inside an allowed directory cannot point outside it.
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	for _, dir := range pm.allowedDirs {
+		if resolvedDir, err := filepath.EvalSymlinks(dir); err == nil {
+			dir = resolvedDir
+		}
+		if rel, err := filepath.Rel(dir, abs); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "." {
+			return nil
+		}
+	}
+	return fmt.Errorf("plugin path %q is outside the allowed plugin directories %v", path, pm.allowedDirs)
 }
 
 // NewPluginManager creates a new plugin manager
@@ -254,6 +305,10 @@ func (w *pluginWrapper) Cleanup() error {
 func (pm *PluginManager) LoadPlugin(name, path string, config map[string]interface{}, hooks []string) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
+
+	if err := pm.checkPathLocked(path); err != nil {
+		return err
+	}
 
 	// Load the plugin file
 	p, err := plugin.Open(path)
@@ -434,6 +489,10 @@ func (pm *PluginManager) PluginMiddleware() echo.MiddlewareFunc {
 func (pm *PluginManager) LoadMiddleware(name, binaryPath string, config map[string]interface{}) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
+
+	if err := pm.checkPathLocked(binaryPath); err != nil {
+		return err
+	}
 
 	// Check if already loaded
 	if _, exists := pm.middlewares[name]; exists {

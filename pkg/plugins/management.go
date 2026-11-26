@@ -2,10 +2,11 @@ package plugins
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"plugin"
 	"time"
 
@@ -139,15 +140,29 @@ func (pu *PluginUploader) EnablePlugin(c echo.Context, pm *PluginManager) error 
 		})
 	}
 
-	// Download plugin from GridFS to temporary location
-	tempPath := filepath.Join(pu.uploadDir, fmt.Sprintf("%s-%s.so", pluginInfo.Name, pluginInfo.Version))
-	if err := pu.downloadPluginFromGridFS(ctx, pluginInfo.FileID, tempPath); err != nil {
+	// Download plugin from GridFS to a fresh temporary file
+	tempPath, err := pu.downloadPluginFromGridFS(ctx, pluginInfo.FileID)
+	if err != nil {
 		pu.logger.WithError(err).Error("Failed to download plugin from GridFS")
 		return c.JSON(500, map[string]interface{}{
 			"error": "Failed to load plugin file",
 		})
 	}
-	defer os.Remove(tempPath) // Clean up after loading
+	defer func() { _ = os.Remove(tempPath) }() // Clean up after loading
+
+	// Loading runs the plugin's code, so first make sure this is the binary that was uploaded
+	// and validated: same SHA-256 as recorded at upload, and still a valid plugin.
+	if err := verifyFileHash(tempPath, pluginInfo.FileHash); err != nil {
+		pu.logger.WithError(err).WithField("plugin", pluginInfo.Name).Error("Plugin binary does not match its upload")
+		return c.JSON(500, map[string]interface{}{
+			"error": "Plugin binary does not match the uploaded file; refusing to load it",
+		})
+	}
+	if err := NewPluginValidator().ValidatePlugin(tempPath, pluginInfo.Name); err != nil {
+		return c.JSON(400, map[string]interface{}{
+			"error": fmt.Sprintf("Plugin validation failed: %s", err.Error()),
+		})
+	}
 
 	// Load the plugin
 	p, err := plugin.Open(tempPath)
@@ -424,28 +439,48 @@ func (pu *PluginUploader) UpdatePluginConfig(c echo.Context) error {
 	})
 }
 
-// downloadPluginFromGridFS downloads a plugin file from GridFS to a local path
-func (pu *PluginUploader) downloadPluginFromGridFS(ctx context.Context, fileID primitive.ObjectID, destPath string) error {
-	// Open download stream
+// downloadPluginFromGridFS writes the stored binary to a new temporary file in the private
+// upload directory and returns its path.
+func (pu *PluginUploader) downloadPluginFromGridFS(ctx context.Context, fileID primitive.ObjectID) (string, error) {
 	downloadStream, err := pu.bucket.OpenDownloadStream(fileID)
 	if err != nil {
-		return fmt.Errorf("failed to open download stream: %w", err)
+		return "", fmt.Errorf("failed to open download stream: %w", err)
 	}
-	defer downloadStream.Close()
+	defer func() { _ = downloadStream.Close() }()
 
-	// Create destination file
-	destFile, err := os.Create(destPath)
+	destFile, err := os.CreateTemp(pu.uploadDir, "enable-*.so")
 	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
+		return "", fmt.Errorf("failed to create destination file: %w", err)
 	}
-	defer destFile.Close()
+	if _, err := io.Copy(destFile, downloadStream); err != nil {
+		_ = destFile.Close()
+		_ = os.Remove(destFile.Name())
+		return "", fmt.Errorf("failed to download file: %w", err)
+	}
+	if err := destFile.Close(); err != nil {
+		_ = os.Remove(destFile.Name())
+		return "", fmt.Errorf("failed to download file: %w", err)
+	}
+	return destFile.Name(), nil
+}
 
-	// Copy data
-	_, err = io.Copy(destFile, downloadStream)
+// verifyFileHash checks a file against the hex SHA-256 recorded at upload.
+func verifyFileHash(path, want string) error {
+	if want == "" {
+		return fmt.Errorf("no hash recorded for this plugin")
+	}
+	f, err := os.Open(path) //nolint:gosec // our own temporary file
 	if err != nil {
-		return fmt.Errorf("failed to download file: %w", err)
+		return err
 	}
-
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != want {
+		return fmt.Errorf("sha256 %s, want %s", got, want)
+	}
 	return nil
 }
 
