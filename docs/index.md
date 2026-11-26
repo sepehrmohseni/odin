@@ -94,12 +94,23 @@ services; response caching that respects `Cache-Control`.
 Prometheus metrics per service, OpenTelemetry traces with context propagation, structured
 access logs, and `/health`, `/ready` and `/live`.
 </div>
+<div markdown>
+**Plugins**
+
+Go middleware in three phases of each service's pipeline, ordered by priority and limited to
+routes; enabled and disabled without a restart.
+</div>
+<div markdown>
+**API description**
+
+A generated OpenAPI 3 document of your routes, or your own, with Swagger UI.
+</div>
 </div>
 
 <p class="status">
 Odin is at 0.1. The configuration format may still change before 1.0; the
 <a href="changelog/">changelog</a> lists every change you need to check when upgrading. Planned
-work, including gRPC transcoding, OIDC and a plugin pipeline, is on the
+work, including gRPC transcoding, OIDC and WASM plugins, is on the
 <a href="roadmap/">roadmap</a>, and the <a href="AUDIT/">audit</a> records what was found and
 fixed.
 </p>
