@@ -48,8 +48,8 @@ cores (default half). The check image holds no project code and is shared across
 
 ## Conventions
 
-- Errors: wrap with `fmt.Errorf("...: %w", err)`; handlers return `echo.NewHTTPError(code, msg)`;
-  log with the injected `*logrus.Logger` and fields.
+- Errors: wrap with `fmt.Errorf("...: %w", err)`; handlers return `echo.NewHTTPError(code, msg)`,
+  which `pkg/errors.ErrorHandler` renders; log with the injected `*logrus.Logger` and fields.
 - New per-service options: add to `config.ServiceConfig` (yaml tag, doc comment), copy into
   `service.Config` in `gateway.go`, use in `pkg/routing`, test in `test/unit/pkg/gateway`, document
   in `docs/configuration.md`. See the `service-feature` skill.

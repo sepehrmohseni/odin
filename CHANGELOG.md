@@ -20,6 +20,9 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `post-request` and `pre-response` hooks fire; an `*echo.HTTPError` from a plugin keeps its
   status (COR-21).
 - Enabled uploaded plugins are activated again at startup.
+- Gateway errors go through one handler: the `{"message": ...}` body is unchanged, a deadline
+  is a 504 instead of a 500, errors wrapping `pkg/errors` sentinels get their status, and
+  server errors are logged with the request (MNT-03).
 
 ### Changed
 

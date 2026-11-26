@@ -1,6 +1,8 @@
+// Package errors turns handler errors into HTTP responses for the whole gateway.
 package errors
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Standard error types
+// Sentinel errors that handlers can wrap; StatusCodeFromError maps them to a status.
 var (
 	ErrNotFound           = errors.New("resource not found")
 	ErrUnauthorized       = errors.New("unauthorized access")
@@ -20,14 +22,14 @@ var (
 	ErrTimeout            = errors.New("request timed out")
 )
 
-// HTTPError represents an error with HTTP status code and details
+// HTTPError is an error with a status, a message for the client and optional details.
 type HTTPError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Details string `json:"details,omitempty"`
 }
 
-// Error returns the error message
+// Error returns the message and, if set, the details.
 func (e *HTTPError) Error() string {
 	if e.Details != "" {
 		return fmt.Sprintf("%s: %s", e.Message, e.Details)
@@ -35,20 +37,21 @@ func (e *HTTPError) Error() string {
 	return e.Message
 }
 
-// NewHTTPError creates a new HTTPError
+// NewHTTPError creates an HTTPError.
 func NewHTTPError(code int, message string, details string) *HTTPError {
-	return &HTTPError{
-		Code:    code,
-		Message: message,
-		Details: details,
-	}
+	return &HTTPError{Code: code, Message: message, Details: details}
 }
 
-// StatusCodeFromError returns an appropriate HTTP status code for an error
+// StatusCodeFromError returns the HTTP status for an error: the code of an HTTPError or
+// *echo.HTTPError, the status for a wrapped sentinel, 504 for a deadline, else 500.
 func StatusCodeFromError(err error) int {
 	var httpErr *HTTPError
 	if errors.As(err, &httpErr) {
 		return httpErr.Code
+	}
+	var echoErr *echo.HTTPError
+	if errors.As(err, &echoErr) {
+		return echoErr.Code
 	}
 
 	switch {
@@ -60,62 +63,80 @@ func StatusCodeFromError(err error) int {
 		return http.StatusForbidden
 	case errors.Is(err, ErrBadRequest):
 		return http.StatusBadRequest
-	case errors.Is(err, ErrTimeout), errors.Is(err, ErrServiceUnavailable):
+	case errors.Is(err, ErrTimeout), errors.Is(err, context.DeadlineExceeded):
+		return http.StatusGatewayTimeout
+	case errors.Is(err, ErrServiceUnavailable):
 		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}
 }
 
-// ErrorHandler creates a custom error handler for Echo
+// ErrorHandler is the gateway's echo.HTTPErrorHandler. The body keeps the shape of Echo's
+// default handler, {"message": "..."}, so clients see no change; HTTPError adds "details".
+// A raw error's text is never sent (it may name internal hosts). Beyond the default, wrapped
+// sentinels and deadlines get their own status, and server errors are logged with the request
+// (client errors only at debug level, so a scan of unknown paths does not flood the log).
 func ErrorHandler(logger *logrus.Logger) echo.HTTPErrorHandler {
 	return func(err error, c echo.Context) {
-		var he *HTTPError
-		var ee *echo.HTTPError
+		if c.Response().Committed {
+			// Headers are out (a streamed or proxied response failed midway): nothing to send.
+			logger.WithError(err).WithField("path", c.Request().URL.Path).Debug("Error after the response was sent")
+			return
+		}
 
-		switch {
-		case errors.As(err, &he):
-			logger.WithFields(logrus.Fields{
-				"method":  c.Request().Method,
-				"path":    c.Request().URL.Path,
-				"code":    he.Code,
-				"message": he.Message,
-				"details": he.Details,
-			}).Error("HTTP error occurred")
+		code, body := responseFor(err)
 
-			if err := c.JSON(he.Code, map[string]interface{}{
-				"error":   he.Message,
-				"details": he.Details,
-			}); err != nil {
-				logger.WithError(err).Error("Failed to write error response")
-			}
+		fields := logrus.Fields{
+			"method": c.Request().Method,
+			"path":   c.Request().URL.Path,
+			"status": code,
+		}
+		if code >= http.StatusInternalServerError {
+			logger.WithFields(fields).WithError(err).Error("Request failed")
+		} else {
+			logger.WithFields(fields).WithError(err).Debug("Request rejected")
+		}
 
-		case errors.As(err, &ee):
-			logger.WithFields(logrus.Fields{
-				"method":  c.Request().Method,
-				"path":    c.Request().URL.Path,
-				"code":    ee.Code,
-				"message": ee.Message,
-			}).Error("Echo HTTP error occurred")
-
-			if err := c.JSON(ee.Code, map[string]interface{}{
-				"error": ee.Message,
-			}); err != nil {
-				logger.WithError(err).Error("Failed to write error response")
-			}
-
-		default:
-			logger.WithFields(logrus.Fields{
-				"method": c.Request().Method,
-				"path":   c.Request().URL.Path,
-				"error":  err.Error(),
-			}).Error("Unhandled error occurred")
-
-			if err := c.JSON(http.StatusInternalServerError, map[string]interface{}{
-				"error": "Internal server error",
-			}); err != nil {
-				logger.WithError(err).Error("Failed to write error response")
-			}
+		var werr error
+		if c.Request().Method == http.MethodHead {
+			werr = c.NoContent(code)
+		} else {
+			werr = c.JSON(code, body)
+		}
+		if werr != nil {
+			logger.WithError(werr).Warn("Failed to write error response")
 		}
 	}
+}
+
+func responseFor(err error) (int, interface{}) {
+	var he *HTTPError
+	if errors.As(err, &he) {
+		body := map[string]string{"message": he.Message}
+		if he.Details != "" {
+			body["details"] = he.Details
+		}
+		return he.Code, body
+	}
+
+	var ee *echo.HTTPError
+	if errors.As(err, &ee) {
+		// echo.NewHTTPError(code).SetInternal(another *echo.HTTPError) reports the inner one,
+		// as Echo's default handler does.
+		var inner *echo.HTTPError
+		if ee.Internal != nil && errors.As(ee.Internal, &inner) {
+			ee = inner
+		}
+		if msg, ok := ee.Message.(string); ok {
+			return ee.Code, map[string]string{"message": msg}
+		}
+		if ee.Message == nil {
+			return ee.Code, map[string]string{"message": http.StatusText(ee.Code)}
+		}
+		return ee.Code, ee.Message
+	}
+
+	code := StatusCodeFromError(err)
+	return code, map[string]string{"message": http.StatusText(code)}
 }

@@ -1,6 +1,9 @@
 package errors
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,7 +13,19 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func handle(t *testing.T, method string, err error) *httptest.ResponseRecorder {
+	t.Helper()
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(httptest.NewRequest(method, "/test", nil), rec)
+	errors.ErrorHandler(logger)(err, c)
+	return rec
+}
 
 func TestNewHTTPError(t *testing.T) {
 	err := errors.NewHTTPError(http.StatusBadRequest, "Bad request", "Invalid input")
@@ -18,60 +33,60 @@ func TestNewHTTPError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, err.Code)
 	assert.Equal(t, "Bad request", err.Message)
 	assert.Equal(t, "Invalid input", err.Details)
+	assert.Equal(t, "Bad request: Invalid input", err.Error())
 }
 
-func TestHTTPErrorError(t *testing.T) {
-	err := errors.NewHTTPError(http.StatusNotFound, "Not found", "Resource not found")
-
-	assert.Equal(t, "Not found: Resource not found", err.Error())
+func TestErrorHandlerBodies(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		code int
+		body string
+	}{
+		{"HTTPError with details", errors.NewHTTPError(http.StatusBadRequest, "custom error", "details"),
+			http.StatusBadRequest, `{"details":"details","message":"custom error"}`},
+		{"echo error keeps Echo's shape", echo.NewHTTPError(http.StatusNotFound, "not found"),
+			http.StatusNotFound, `{"message":"not found"}`},
+		{"echo error without message", echo.NewHTTPError(http.StatusTooManyRequests),
+			http.StatusTooManyRequests, `{"message":"Too Many Requests"}`},
+		{"echo error with a map message", echo.NewHTTPError(http.StatusConflict, map[string]string{"error": "taken"}),
+			http.StatusConflict, `{"error":"taken"}`},
+		{"inner echo error wins", echo.NewHTTPError(http.StatusBadRequest).SetInternal(echo.NewHTTPError(http.StatusForbidden, "no")),
+			http.StatusForbidden, `{"message":"no"}`},
+		{"raw error text is not sent", fmt.Errorf("dial tcp 10.0.0.5:8080: connection refused"),
+			http.StatusInternalServerError, `{"message":"Internal Server Error"}`},
+		{"wrapped sentinel", fmt.Errorf("user 42: %w", errors.ErrNotFound),
+			http.StatusNotFound, `{"message":"Not Found"}`},
+		{"deadline", fmt.Errorf("upstream: %w", context.DeadlineExceeded),
+			http.StatusGatewayTimeout, `{"message":"Gateway Timeout"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := handle(t, http.MethodGet, tt.err)
+			assert.Equal(t, tt.code, rec.Code)
+			assert.JSONEq(t, tt.body, rec.Body.String())
+		})
+	}
 }
 
-func TestErrorHandler(t *testing.T) {
-	logger := logrus.New()
-	handler := errors.ErrorHandler(logger)
-
-	e := echo.New()
-	req := httptest.NewRequest("GET", "/test", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	customErr := errors.NewHTTPError(http.StatusBadRequest, "custom error", "details")
-
-	handler(customErr, c)
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-func TestErrorHandlerWithEchoHTTPError(t *testing.T) {
-	logger := logrus.New()
-	handler := errors.ErrorHandler(logger)
-
-	e := echo.New()
-	req := httptest.NewRequest("GET", "/test", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	echoErr := echo.NewHTTPError(http.StatusNotFound, "not found")
-
-	handler(echoErr, c)
-
+func TestErrorHandlerHeadHasNoBody(t *testing.T) {
+	rec := handle(t, http.MethodHead, echo.NewHTTPError(http.StatusNotFound, "not found"))
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Empty(t, rec.Body.String())
 }
 
-func TestErrorHandlerWithGenericError(t *testing.T) {
+func TestErrorHandlerLeavesACommittedResponseAlone(t *testing.T) {
 	logger := logrus.New()
-	handler := errors.ErrorHandler(logger)
-
+	logger.SetOutput(io.Discard)
 	e := echo.New()
-	req := httptest.NewRequest("GET", "/test", nil)
 	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/test", nil), rec)
+	require.NoError(t, c.String(http.StatusOK, "partial"))
 
-	genericErr := assert.AnError
+	errors.ErrorHandler(logger)(fmt.Errorf("stream broke"), c)
 
-	handler(genericErr, c)
-
-	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "partial", rec.Body.String())
 }
 
 func TestStatusCodeFromError(t *testing.T) {
@@ -80,52 +95,21 @@ func TestStatusCodeFromError(t *testing.T) {
 		err      error
 		expected int
 	}{
-		{
-			name:     "HTTPError",
-			err:      errors.NewHTTPError(http.StatusBadRequest, "bad request", ""),
-			expected: http.StatusBadRequest,
-		},
-		{
-			name:     "ErrNotFound",
-			err:      errors.ErrNotFound,
-			expected: http.StatusNotFound,
-		},
-		{
-			name:     "ErrUnauthorized",
-			err:      errors.ErrUnauthorized,
-			expected: http.StatusUnauthorized,
-		},
-		{
-			name:     "ErrForbidden",
-			err:      errors.ErrForbidden,
-			expected: http.StatusForbidden,
-		},
-		{
-			name:     "ErrBadRequest",
-			err:      errors.ErrBadRequest,
-			expected: http.StatusBadRequest,
-		},
-		{
-			name:     "ErrTimeout",
-			err:      errors.ErrTimeout,
-			expected: http.StatusServiceUnavailable,
-		},
-		{
-			name:     "ErrServiceUnavailable",
-			err:      errors.ErrServiceUnavailable,
-			expected: http.StatusServiceUnavailable,
-		},
-		{
-			name:     "Generic error",
-			err:      assert.AnError,
-			expected: http.StatusInternalServerError,
-		},
+		{"HTTPError", errors.NewHTTPError(http.StatusBadRequest, "bad request", ""), http.StatusBadRequest},
+		{"echo.HTTPError", echo.NewHTTPError(http.StatusTeapot), http.StatusTeapot},
+		{"ErrNotFound", errors.ErrNotFound, http.StatusNotFound},
+		{"ErrUnauthorized", errors.ErrUnauthorized, http.StatusUnauthorized},
+		{"ErrForbidden", errors.ErrForbidden, http.StatusForbidden},
+		{"ErrBadRequest", errors.ErrBadRequest, http.StatusBadRequest},
+		{"ErrTimeout", errors.ErrTimeout, http.StatusGatewayTimeout},
+		{"DeadlineExceeded", context.DeadlineExceeded, http.StatusGatewayTimeout},
+		{"ErrServiceUnavailable", errors.ErrServiceUnavailable, http.StatusServiceUnavailable},
+		{"wrapped", fmt.Errorf("x: %w", errors.ErrForbidden), http.StatusForbidden},
+		{"Generic error", assert.AnError, http.StatusInternalServerError},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			code := errors.StatusCodeFromError(tt.err)
-			assert.Equal(t, tt.expected, code)
+			assert.Equal(t, tt.expected, errors.StatusCodeFromError(tt.err))
 		})
 	}
 }

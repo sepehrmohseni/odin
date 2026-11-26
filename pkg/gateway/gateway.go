@@ -15,6 +15,7 @@ import (
 	"odin/pkg/auth"
 	"odin/pkg/cache"
 	"odin/pkg/config"
+	gwerrors "odin/pkg/errors"
 	"odin/pkg/graphql"
 	"odin/pkg/grpc"
 	"odin/pkg/health"
@@ -56,6 +57,9 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
+	// Same {"message": ...} bodies as Echo's default, plus statuses for wrapped sentinel errors
+	// and deadlines, and server errors logged with their request.
+	e.HTTPErrorHandler = gwerrors.ErrorHandler(logger)
 
 	// Client IP: the connection's address unless the request came through a trusted proxy.
 	// (Echo's default believes X-Forwarded-For from anyone, so a client could pick its own IP.)

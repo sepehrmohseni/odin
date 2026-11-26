@@ -46,6 +46,15 @@ The order is fixed and deliberate: nothing, not even the cache, can answer a req
 authenticated service before its token has been checked. Global steps (panic recovery, body
 limit, tracing and metrics) wrap every request, including the gateway's own endpoints.
 
+### Error responses
+
+When the gateway itself answers with an error, the body is JSON with a `message`, for example
+`{"message": "Upstream timed out"}` with a 504; a `HEAD` request gets the status only. An error's
+internal text (such as an upstream address) is logged, not sent: an unexpected error is a 500
+with `{"message": "Internal Server Error"}`. Server errors (5xx) are logged at error level with
+the method, path and status; client errors only at debug level. Responses that come from an
+upstream, including its errors, are passed through unchanged.
+
 ## Gateway endpoints
 
 | Path | What |
