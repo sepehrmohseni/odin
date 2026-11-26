@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 )
@@ -54,8 +55,63 @@ func (h *AdminHandler) renderTemplate(c echo.Context, templateName string, data 
 		return c.JSON(http.StatusOK, data)
 	}
 
-	// Parse all template files including partials to support includes
-	tmpl, err := template.New("").Funcs(template.FuncMap{
+	var output strings.Builder
+	if err := renderPage(&output, templateName, data); err != nil {
+		// Fall back to the built-in copy of the core pages when the template files are missing.
+		content := getTemplateContent(templateName)
+		if content == "Template not found" {
+			h.logger.WithError(err).Errorf("Failed to render template: %s", templateName)
+			return c.String(http.StatusInternalServerError, "Template error")
+		}
+		tmpl, perr := template.New(templateName).Parse(content)
+		if perr != nil {
+			return c.String(http.StatusInternalServerError, "Template error")
+		}
+		output.Reset()
+		if err := tmpl.ExecuteTemplate(&output, templateName, data); err != nil {
+			return c.String(http.StatusInternalServerError, "Template execution error")
+		}
+	}
+
+	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+	return c.HTML(http.StatusOK, output.String())
+}
+
+// pageTemplates caches one parsed template set per page.
+var pageTemplates sync.Map // page name -> *pageTemplate
+
+type pageTemplate struct {
+	set   *template.Template
+	entry string // template to execute
+}
+
+// renderPage renders one admin page. Each page gets its own template set: the shared layouts and
+// partials, then the page itself, parsed last so its "title", "content" and "scripts" win.
+// (All pages used to share one set, so every page showed whichever file defined "content" last:
+// the traces page.)
+func renderPage(w io.Writer, name string, data interface{}) error {
+	var pt *pageTemplate
+	if cached, ok := pageTemplates.Load(name); ok {
+		pt, _ = cached.(*pageTemplate)
+	}
+	if pt == nil {
+		var err error
+		if pt, err = parsePage(name); err != nil {
+			return err
+		}
+		pageTemplates.Store(name, pt)
+	}
+	return pt.set.ExecuteTemplate(w, pt.entry, data)
+}
+
+func parsePage(name string) (*pageTemplate, error) {
+	pagePath := filepath.Join(templateDir, filepath.Base(name))
+	page, err := os.ReadFile(pagePath) //nolint:gosec // a fixed set of page names inside the template directory
+	if err != nil {
+		return nil, err
+	}
+
+	set := template.New("").Funcs(template.FuncMap{
 		"hasHook": func(hooks []string, hook string) bool {
 			for _, h := range hooks {
 				if h == hook {
@@ -64,39 +120,47 @@ func (h *AdminHandler) renderTemplate(c echo.Context, templateName string, data 
 			}
 			return false
 		},
-	}).ParseGlob(filepath.Join(templateDir, "*.html"))
+	})
+	// Some standalone pages include a "nav" block that no file defines.
+	if _, err := set.New("odin-fallbacks").Parse(`{{define "nav"}}{{end}}`); err != nil {
+		return nil, err
+	}
 
-	if err == nil {
-		// Also parse partials if they exist
-		partialsPattern := filepath.Join(templateDir, "partials", "*.html")
-		if _, err := os.Stat(filepath.Join(templateDir, "partials")); err == nil {
-			tmpl, _ = tmpl.ParseGlob(partialsPattern)
+	files := []string{filepath.Join(templateDir, "base.html"), filepath.Join(templateDir, "layout.html")}
+	partials, _ := filepath.Glob(filepath.Join(templateDir, "partials", "*.html"))
+	files = append(files, partials...)
+	if name != "service_list.html" {
+		files = append(files, filepath.Join(templateDir, "service_list.html")) // used by the dashboard
+	}
+	files = append(files, pagePath)
+
+	existing := files[:0]
+	for _, f := range files {
+		if _, err := os.Stat(f); err == nil {
+			existing = append(existing, f)
 		}
 	}
-
-	if err != nil {
-		h.logger.WithError(err).Errorf("Failed to parse templates")
-
-		content := getTemplateContent(templateName)
-		if content != "Template not found" {
-			h.logger.Info("Using embedded template as fallback")
-			tmpl, err = template.New(templateName).Parse(content)
-			if err != nil {
-				return c.String(http.StatusInternalServerError, "Template error")
-			}
-		} else {
-			return c.String(http.StatusInternalServerError, "Template not found")
-		}
+	if _, err := set.ParseFiles(existing...); err != nil {
+		return nil, err
 	}
 
-	var output strings.Builder
-	if err := tmpl.ExecuteTemplate(&output, templateName, data); err != nil {
-		h.logger.WithError(err).Errorf("Failed to execute template: %s", templateName)
-		return c.String(http.StatusInternalServerError, "Template execution error")
+	// Pages either define a template named after themselves (most), are complete documents, or
+	// only fill the "content" block of layout.html (the Postman page).
+	entry := name
+	text := string(page)
+	selfDefined := strings.Contains(text, `define "`+name+`"`)
+	standalone := strings.Contains(strings.ToLower(text), "<html")
+	if !selfDefined && !standalone {
+		entry = "layout.html"
 	}
+	return &pageTemplate{set: set, entry: entry}, nil
+}
 
-	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
-	return c.HTML(http.StatusOK, output.String())
+// pageRenderer lets handlers that call c.Render use the same per-page template sets.
+type pageRenderer struct{}
+
+func (pageRenderer) Render(w io.Writer, name string, data interface{}, _ echo.Context) error {
+	return renderPage(w, name, data)
 }
 
 func getTemplateContent(name string) string {

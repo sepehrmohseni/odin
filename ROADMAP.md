@@ -30,7 +30,7 @@ Critical and high items that are contained enough to finish in the current harde
       ([OPS-06](docs/AUDIT.md#operations))
 - [ ] Release workflow that can publish multi-arch images and binaries
       ([OPS-07](docs/AUDIT.md#operations)) — the first tag and public image wait for the owner
-- [ ] Admin pages render their own content; plugin pages render at all
+- [x] Admin pages render their own content; plugin pages render at all
       ([COR-11](docs/AUDIT.md#correctness))
 - [ ] "Export to Postman" refuses instead of overwriting a collection with a placeholder
       ([COR-15](docs/AUDIT.md#correctness))

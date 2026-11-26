@@ -12,6 +12,10 @@ func (h *AdminHandler) Register(e *echo.Echo) {
 	e.Static("/static", "pkg/admin/static")
 
 	h.initTemplates()
+	// Plugin pages render with c.Render; there was no renderer, so they answered 500.
+	if e.Renderer == nil {
+		e.Renderer = pageRenderer{}
+	}
 
 	adminGroup := e.Group("/admin")
 
