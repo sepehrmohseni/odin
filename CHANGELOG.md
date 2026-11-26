@@ -71,6 +71,9 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   running chain (they only changed the database record) and accept only the pipeline's phases;
   the API works without MongoDB. The unimplemented "compile" endpoint and the bulk
   enable/disable endpoints, which only flipped database flags, are removed (MNT-03).
+- The admin's Postman page works: it called `/admin/api/integrations/postman/...` while the API
+  was mounted at `/admin/integrations/postman/...`. The API moves under `/admin/api/`, like the
+  admin's other JSON APIs (COR-12).
 - The admin's Settings page shows and saves the real settings: the API returned raw structs
   (`{"Port": 8080, "Timeout": 30000000000}`) and the page called helpers that did not exist, so
   every field was empty (COR-12, in part). Masked secrets are kept on save.

@@ -105,7 +105,7 @@ func (h *IntegrationHandler) Shutdown() error {
 
 // RegisterRoutes registers integration API routes
 func (h *IntegrationHandler) RegisterRoutes(g *echo.Group) {
-	integration := g.Group("/integrations/postman")
+	integration := g.Group("/api/integrations/postman")
 
 	// Status and configuration
 	integration.GET("/status", h.GetStatus)

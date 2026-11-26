@@ -54,7 +54,6 @@ more.
 
 | Item | Finding | Effort |
 | --- | --- | --- |
-| Postman page calls `/admin/api/integrations/...`; the routes are `/admin/integrations/...` | [COR-12](docs/AUDIT.md#correctness) | S |
 | GraphQL: allow `__typename`, forward headers, keep the upstream status, implement or drop query caching | [COR-10](docs/AUDIT.md#correctness) | S |
 | One writer goroutine per monitoring WebSocket client | [COR-13](docs/AUDIT.md#correctness) | S |
 | Warn about unknown config keys (they are silently ignored) | [COR-24](docs/AUDIT.md#correctness) | S |
