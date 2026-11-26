@@ -5,7 +5,7 @@ set -eu
 
 usage() {
   cat <<'EOF'
-usage: check.sh [all|build|fmt|vet|test|cover|lint|vuln|fix|upgrade|shell|-- command...]
+usage: check.sh [all|build|fmt|vet|test|cover|lint|vuln|docs|fix|upgrade|shell|-- command...]
   all     mod verify, gofmt, vet, build, race tests, golangci-lint, govulncheck (what CI runs)
   build   go build ./... and the gateway binaries
   fmt     list files gofmt would change (fails if any)
@@ -14,6 +14,7 @@ usage: check.sh [all|build|fmt|vet|test|cover|lint|vuln|fix|upgrade|shell|-- com
   cover   tests with coverage of ./pkg/... and a per-function summary
   lint    golangci-lint run
   vuln    govulncheck ./... (needs network for the vulnerability database)
+  docs    check that docs/reference/configuration.md matches the config schema
   fix     gofmt -w and go mod tidy, written to the checkout (mounted read-write for this)
   upgrade go get -u ./... and go mod tidy, written to the checkout
   shell   an interactive shell in the prepared copy
@@ -84,6 +85,16 @@ lint() { step golangci-lint run ./...; }
 
 vuln() { step govulncheck ./...; }
 
+# The configuration reference is generated from pkg/config; it must be committed up to date.
+docs() {
+  printf '\n\033[1m==> go run ./tools/configref (docs/reference/configuration.md up to date)\033[0m\n'
+  go run ./tools/configref >/tmp/configuration.md
+  if ! diff -u docs/reference/configuration.md /tmp/configuration.md; then
+    echo "docs/reference/configuration.md is stale; run: scripts/docker-check.sh -- go run ./tools/configref > docs/reference/configuration.md" >&2
+    return 1
+  fi
+}
+
 task="${1:-all}"
 [ "$#" -gt 0 ] && shift
 case "$task" in
@@ -95,6 +106,7 @@ case "$task" in
     test_race
     lint
     vuln
+    docs
     printf '\n\033[1;32mAll checks passed.\033[0m\n'
     ;;
   build) build ;;
@@ -104,6 +116,7 @@ case "$task" in
   cover) cover ;;
   lint) lint ;;
   vuln) vuln ;;
+  docs) docs ;;
   shell) exec bash ;;
   --) exec "$@" ;;
   -h | --help | help) usage ;;

@@ -32,16 +32,23 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port            int           `yaml:"port"`
-	Timeout         time.Duration `yaml:"timeout"`
-	ReadTimeout     time.Duration `yaml:"readTimeout"`
-	WriteTimeout    time.Duration `yaml:"writeTimeout"`
+	// Port to listen on (default 8080; GATEWAY_PORT overrides it).
+	Port int `yaml:"port"`
+	// Not used by the request path; per-service timeouts are services[].timeout.
+	Timeout time.Duration `yaml:"timeout"`
+	// Maximum time to read a whole request, including the body (default 30s).
+	ReadTimeout time.Duration `yaml:"readTimeout"`
+	// Maximum time to write a response (default 30s). Long streams need a larger value.
+	WriteTimeout time.Duration `yaml:"writeTimeout"`
+	// How long shutdown waits for in-flight requests (default 15s).
 	GracefulTimeout time.Duration `yaml:"gracefulTimeout"`
 	// ReadHeaderTimeout bounds reading request headers (default 10s); IdleTimeout bounds idle
 	// keep-alive connections (default 120s).
 	ReadHeaderTimeout time.Duration `yaml:"readHeaderTimeout"`
-	IdleTimeout       time.Duration `yaml:"idleTimeout"`
-	Compression       bool          `yaml:"compression"`
+	// How long idle keep-alive connections are kept (default 120s).
+	IdleTimeout time.Duration `yaml:"idleTimeout"`
+	// Gzip responses for clients that accept it.
+	Compression bool `yaml:"compression"`
 	// MaxBodySize limits request bodies on proxied routes, e.g. "10M" (default) or "512K".
 	MaxBodySize string `yaml:"maxBodySize"`
 	// TrustedProxies lists the proxy addresses or CIDRs whose X-Forwarded-For header is
@@ -53,50 +60,71 @@ type ServerConfig struct {
 }
 
 type LoggingConfig struct {
+	// debug, info (default), warn or error.
 	Level string `yaml:"level"`
-	JSON  bool   `yaml:"json"`
+	// Write logs as JSON instead of text.
+	JSON bool `yaml:"json"`
 }
 
 type AuthConfig struct {
-	JWTSecret         string        `yaml:"jwtSecret"`
-	AccessTokenTTL    time.Duration `yaml:"accessTokenTTL"`
-	RefreshTokenTTL   time.Duration `yaml:"refreshTokenTTL"`
-	IgnorePathRegexes []string      `yaml:"ignorePathRegexes"`
-	// Issuer and Audience, when set, must match the token's iss and aud claims.
-	Issuer   string `yaml:"issuer"`
+	// HMAC secret for verifying JWTs. ODIN_JWT_SECRET or an auth_secrets.yaml file take precedence.
+	JWTSecret string `yaml:"jwtSecret"`
+	// Not used by the gateway (it verifies tokens, it does not issue them).
+	AccessTokenTTL time.Duration `yaml:"accessTokenTTL"`
+	// Not used by the gateway.
+	RefreshTokenTTL time.Duration `yaml:"refreshTokenTTL"`
+	// Request paths (regular expressions) that skip JWT checks, e.g. ^/health$.
+	IgnorePathRegexes []string `yaml:"ignorePathRegexes"`
+	// Issuer, when set, must match the token's iss claim.
+	Issuer string `yaml:"issuer"`
+	// Audience, when set, must be in the token's aud claim.
 	Audience string `yaml:"audience"`
 	// Leeway tolerates clock skew when checking exp, nbf and iat.
 	Leeway time.Duration `yaml:"leeway"`
 }
 
 type AdminConfig struct {
-	Enabled  bool   `yaml:"enabled"`
+	// Serve the admin interface under /admin. Off by default; when off, no admin route exists.
+	Enabled bool `yaml:"enabled"`
+	// Admin login name (default admin; ODIN_ADMIN_USERNAME overrides it).
 	Username string `yaml:"username"`
+	// Admin password in plain text. Prefer passwordHash or ODIN_ADMIN_PASSWORD; without any, a random password is logged at startup.
 	Password string `yaml:"password"`
 	// PasswordHash is a bcrypt hash of the admin password; when set, Password is ignored.
 	PasswordHash string `yaml:"passwordHash"`
 }
 
 type PluginsConfig struct {
-	Enabled   bool           `yaml:"enabled"`
-	Directory string         `yaml:"directory"`
-	Plugins   []PluginConfig `yaml:"plugins"`
+	// Run Go plugins (built with -buildmode=plugin) on requests.
+	Enabled bool `yaml:"enabled"`
+	// Directory plugins are uploaded to and loaded from (default /var/odin/plugins).
+	Directory string `yaml:"directory"`
+	// Plugins to load at startup.
+	Plugins []PluginConfig `yaml:"plugins"`
 }
 
 type PluginConfig struct {
-	Name    string                 `yaml:"name"`
-	Path    string                 `yaml:"path"`
-	Enabled bool                   `yaml:"enabled"`
-	Config  map[string]interface{} `yaml:"config"`
-	Hooks   []string               `yaml:"hooks"` // pre-request, post-request, pre-response, post-response
+	// Unique plugin name.
+	Name string `yaml:"name"`
+	// Path to the .so file.
+	Path string `yaml:"path"`
+	// Load this plugin.
+	Enabled bool `yaml:"enabled"`
+	// Settings passed to the plugin's Initialize.
+	Config map[string]interface{} `yaml:"config"`
+	Hooks  []string               `yaml:"hooks"` // pre-request, post-request, pre-response, post-response
 }
 
 type RateLimitConfig struct {
-	Enabled  bool          `yaml:"enabled"`
-	Limit    int           `yaml:"limit"`
+	// Apply limit per duration to every HTTP service, per client (the JWT subject, or the client IP).
+	Enabled bool `yaml:"enabled"`
+	// Requests allowed per duration and client. 0 means no limit.
+	Limit int `yaml:"limit"`
+	// Length of the rate-limit window (default 1m).
 	Duration time.Duration `yaml:"duration"`
 	Strategy string        `yaml:"strategy"` // local (default) or redis
-	RedisURL string        `yaml:"redisUrl"`
+	// Redis for strategy: redis, e.g. redis://redis:6379/0.
+	RedisURL string `yaml:"redisUrl"`
 	// Algorithm is fixed_window (default), sliding_window or token_bucket.
 	Algorithm string `yaml:"algorithm"`
 	// FailClosed rejects requests when Redis is unreachable instead of allowing them.
@@ -104,43 +132,66 @@ type RateLimitConfig struct {
 }
 
 type CacheConfig struct {
-	Enabled     bool          `yaml:"enabled"`
-	TTL         time.Duration `yaml:"ttl"`
-	RedisURL    string        `yaml:"redisUrl"`
-	Strategy    string        `yaml:"strategy"`
-	MaxSizeInMB int           `yaml:"maxSizeInMB"`
+	// Cache GET responses of HTTP services (only safe ones: no credentials, no cookies, no private or no-store).
+	Enabled bool `yaml:"enabled"`
+	// How long entries live, unless the upstream's max-age is shorter.
+	TTL time.Duration `yaml:"ttl"`
+	// Redis for strategy: redis.
+	RedisURL string `yaml:"redisUrl"`
+	// local (default, in memory) or redis (shared by all instances).
+	Strategy string `yaml:"strategy"`
+	// Not enforced yet.
+	MaxSizeInMB int `yaml:"maxSizeInMB"`
 }
 
 type MonitoringConfig struct {
-	Enabled    bool   `yaml:"enabled"`
+	// Serve Prometheus metrics.
+	Enabled bool `yaml:"enabled"`
+	// Metrics path (default /metrics).
 	Path       string `yaml:"path"`
 	WebhookURL string `yaml:"webhookUrl,omitempty"` // Optional webhook for health alerts
 }
 
 type TracingConfig struct {
-	Enabled        bool    `yaml:"enabled"`
-	ServiceName    string  `yaml:"serviceName"`
-	ServiceVersion string  `yaml:"serviceVersion"`
-	Environment    string  `yaml:"environment"`
-	Endpoint       string  `yaml:"endpoint"`
-	SampleRate     float64 `yaml:"sampleRate"`
-	Insecure       bool    `yaml:"insecure"`
+	// Export OpenTelemetry traces over OTLP/HTTP and propagate trace context to upstreams.
+	Enabled bool `yaml:"enabled"`
+	// service.name of the spans (default odin-gateway).
+	ServiceName string `yaml:"serviceName"`
+	// service.version of the spans (default 1.0.0).
+	ServiceVersion string `yaml:"serviceVersion"`
+	// deployment.environment of the spans (default development).
+	Environment string `yaml:"environment"`
+	// OTLP/HTTP endpoint, as a URL or host:port (default http://localhost:4318/v1/traces).
+	Endpoint string `yaml:"endpoint"`
+	// Fraction of traces sampled, 0 to 1 (default 1).
+	SampleRate float64 `yaml:"sampleRate"`
+	// Use plain HTTP to a host:port endpoint.
+	Insecure bool `yaml:"insecure"`
 }
 
 type ServiceMeshConfig struct {
-	Enabled         bool               `yaml:"enabled"`
-	Type            string             `yaml:"type"` // istio, linkerd, consul, none
-	Namespace       string             `yaml:"namespace"`
-	TrustDomain     string             `yaml:"trustDomain"`
-	DiscoveryAddr   string             `yaml:"discoveryAddr"`
-	RefreshInterval time.Duration      `yaml:"refreshInterval"`
-	MTLSEnabled     bool               `yaml:"mtlsEnabled"`
-	CertFile        string             `yaml:"certFile"`
-	KeyFile         string             `yaml:"keyFile"`
-	CAFile          string             `yaml:"caFile"`
-	Istio           *IstioMeshConfig   `yaml:"istio,omitempty"`
-	Linkerd         *LinkerdMeshConfig `yaml:"linkerd,omitempty"`
-	Consul          *ConsulMeshConfig  `yaml:"consul,omitempty"`
+	// Add service-mesh headers (trace and request IDs) to proxied requests.
+	Enabled bool   `yaml:"enabled"`
+	Type    string `yaml:"type"` // istio, linkerd, consul, none
+	// Mesh namespace of the gateway.
+	Namespace string `yaml:"namespace"`
+	// SPIFFE trust domain.
+	TrustDomain string `yaml:"trustDomain"`
+	// Discovery endpoint (service discovery is not implemented yet).
+	DiscoveryAddr string `yaml:"discoveryAddr"`
+	// Discovery refresh interval.
+	RefreshInterval time.Duration `yaml:"refreshInterval"`
+	// Load the mTLS certificates below (not yet used for upstream requests).
+	MTLSEnabled bool `yaml:"mtlsEnabled"`
+	// mTLS certificate.
+	CertFile string `yaml:"certFile"`
+	// mTLS key.
+	KeyFile string `yaml:"keyFile"`
+	// mTLS CA bundle.
+	CAFile  string             `yaml:"caFile"`
+	Istio   *IstioMeshConfig   `yaml:"istio,omitempty"`
+	Linkerd *LinkerdMeshConfig `yaml:"linkerd,omitempty"`
+	Consul  *ConsulMeshConfig  `yaml:"consul,omitempty"`
 }
 
 type IstioMeshConfig struct {
@@ -248,11 +299,17 @@ type OpenAPIConfig struct {
 }
 
 type MongoDBConfig struct {
-	Enabled        bool          `yaml:"enabled"`
-	URI            string        `yaml:"uri"`
-	Database       string        `yaml:"database"`
-	MaxPoolSize    int           `yaml:"maxPoolSize"`
-	MinPoolSize    int           `yaml:"minPoolSize"`
+	// Store plugins and integration settings in MongoDB.
+	Enabled bool `yaml:"enabled"`
+	// Connection string, e.g. mongodb://user:${MONGO_PASSWORD}@mongo:27017/?authSource=admin.
+	URI string `yaml:"uri"`
+	// Database name.
+	Database string `yaml:"database"`
+	// Maximum connections.
+	MaxPoolSize int `yaml:"maxPoolSize"`
+	// Minimum idle connections.
+	MinPoolSize int `yaml:"minPoolSize"`
+	// Timeout for connecting and the startup ping (default 10s).
 	ConnectTimeout time.Duration `yaml:"connectTimeout"`
 	Auth           MongoDBAuth   `yaml:"auth"`
 	TLS            MongoDBTLS    `yaml:"tls"`
@@ -289,21 +346,36 @@ type AIConfig struct {
 }
 
 type ServiceConfig struct {
-	Name           string                  `yaml:"name"`
-	BasePath       string                  `yaml:"basePath"`
-	Targets        []string                `yaml:"targets"`
-	StripBasePath  bool                    `yaml:"stripBasePath"`
-	Timeout        time.Duration           `yaml:"timeout"`
-	RetryCount     int                     `yaml:"retryCount"`
-	RetryDelay     time.Duration           `yaml:"retryDelay"`
-	Authentication bool                    `yaml:"authentication"`
-	LoadBalancing  string                  `yaml:"loadBalancing"`
-	Headers        map[string]string       `yaml:"headers"`
-	Protocol       string                  `yaml:"protocol"` // http, graphql, grpc
-	Transform      TransformConfig         `yaml:"transform"`
-	Aggregation    *AggregationConfig      `yaml:"aggregation,omitempty"`
-	GraphQL        *GraphQLConfig          `yaml:"graphql,omitempty"`
-	GRPC           *GRPCConfig             `yaml:"grpc,omitempty"`
+	// Unique service name; used in metrics, logs and rate-limit keys.
+	Name string `yaml:"name"`
+	// Path prefix routed to this service, e.g. /api/users (matches /api/users and /api/users/...).
+	BasePath string `yaml:"basePath"`
+	// Upstream base URLs, http(s)://host[:port][/path]. Requests are spread across them.
+	Targets []string `yaml:"targets"`
+	// Remove basePath before forwarding (/api/users/7 is sent as /7).
+	StripBasePath bool `yaml:"stripBasePath"`
+	// How long to wait for an upstream's response headers (default 30s). Streams are not cut off.
+	Timeout time.Duration `yaml:"timeout"`
+	// Retries for GET, HEAD and OPTIONS (or requests with an Idempotency-Key) on errors and 502/503/504, each on another target. 0 means the default (3); -1 disables retries.
+	RetryCount int `yaml:"retryCount"`
+	// Delay before a retry, multiplied by the attempt number (default 1s).
+	RetryDelay time.Duration `yaml:"retryDelay"`
+	// Require a valid JWT (Authorization: Bearer ...) for this service.
+	Authentication bool `yaml:"authentication"`
+	// round-robin (default) or random.
+	LoadBalancing string `yaml:"loadBalancing"`
+	// Headers set on every request sent to the upstream.
+	Headers  map[string]string `yaml:"headers"`
+	Protocol string            `yaml:"protocol"` // http, graphql, grpc
+	// Field-mapping rules that move JSON values in request and response bodies.
+	Transform TransformConfig `yaml:"transform"`
+	// Add data from other services to this service's JSON responses.
+	Aggregation *AggregationConfig `yaml:"aggregation,omitempty"`
+	// Limits for protocol: graphql.
+	GraphQL *GraphQLConfig `yaml:"graphql,omitempty"`
+	// Settings for protocol: grpc.
+	GRPC *GRPCConfig `yaml:"grpc,omitempty"`
+	// Active health checks; unhealthy targets get no traffic while a healthy one remains.
 	HealthCheck    *HealthCheckConfig      `yaml:"healthCheck,omitempty"`
 	Cache          *ServiceCacheConfig     `yaml:"cache,omitempty"`
 	RateLimit      *ServiceRateLimitConfig `yaml:"rateLimit,omitempty"`
@@ -323,27 +395,39 @@ type ServiceConfig struct {
 // CanaryConfig routes a share of requests to canary targets: those with Header: HeaderValue or
 // cookie CookieName=CookieValue always, and Weight percent of the rest (sticky per client IP).
 type CanaryConfig struct {
-	Enabled     bool     `yaml:"enabled"`
-	Targets     []string `yaml:"targets"`
-	Weight      int      `yaml:"weight"`
-	Header      string   `yaml:"header,omitempty"`
-	HeaderValue string   `yaml:"headerValue,omitempty"`
-	CookieName  string   `yaml:"cookieName,omitempty"`
-	CookieValue string   `yaml:"cookieValue,omitempty"`
+	// Turn canary routing on.
+	Enabled bool `yaml:"enabled"`
+	// Canary upstreams.
+	Targets []string `yaml:"targets"`
+	// Percentage (0-100) of other clients sent to the canary, sticky per client IP.
+	Weight int `yaml:"weight"`
+	// Requests with this header set to headerValue always go to the canary.
+	Header string `yaml:"header,omitempty"`
+	// Value for header.
+	HeaderValue string `yaml:"headerValue,omitempty"`
+	// Requests with this cookie set to cookieValue always go to the canary.
+	CookieName string `yaml:"cookieName,omitempty"`
+	// Value for cookieName.
+	CookieValue string `yaml:"cookieValue,omitempty"`
 }
 
 // TransformationConfig holds the template-based request and response transformations.
 type TransformationConfig struct {
-	Request  *transform.RequestTransform  `yaml:"request,omitempty"`
+	// Templates for request headers, query parameters and body.
+	Request *transform.RequestTransform `yaml:"request,omitempty"`
+	// Templates for response headers and body.
 	Response *transform.ResponseTransform `yaml:"response,omitempty"`
 }
 
 // ServiceRateLimitConfig sets a service's own rate limit. When rateLimit.enabled is true every
 // service gets the global limit; enabled: false exempts a service, and limit/window override.
 type ServiceRateLimitConfig struct {
-	Enabled *bool         `yaml:"enabled,omitempty"`
-	Limit   int           `yaml:"limit,omitempty"`
-	Window  time.Duration `yaml:"window,omitempty"`
+	// Set false to exempt this service from the global limit.
+	Enabled *bool `yaml:"enabled,omitempty"`
+	// Requests per window and client for this service; overrides rateLimit.limit.
+	Limit int `yaml:"limit,omitempty"`
+	// Window for limit; overrides rateLimit.duration.
+	Window time.Duration `yaml:"window,omitempty"`
 }
 
 // CircuitBreakerConfig stops sending requests to a target that keeps failing. A target's
@@ -351,6 +435,7 @@ type ServiceRateLimitConfig struct {
 // failed (transport error or 5xx); after timeout, up to maxRequests trial requests are let
 // through, and one failure re-opens it.
 type CircuitBreakerConfig struct {
+	// Give each target its own circuit breaker.
 	Enabled      bool          `yaml:"enabled"`
 	FailureRatio float64       `yaml:"failureRatio"` // default 0.5
 	MinRequests  uint32        `yaml:"minRequests"`  // default 10
@@ -362,57 +447,84 @@ type CircuitBreakerConfig struct {
 // ServiceCacheConfig tunes response caching for one service. Caching applies to every HTTP
 // service when cache.enabled is true; a service can opt out with enabled: false.
 type ServiceCacheConfig struct {
-	Enabled *bool         `yaml:"enabled,omitempty"`
-	TTL     time.Duration `yaml:"ttl,omitempty"`
+	// Set false to never cache this service when cache.enabled is true.
+	Enabled *bool `yaml:"enabled,omitempty"`
+	// Overrides cache.ttl for this service.
+	TTL time.Duration `yaml:"ttl,omitempty"`
 }
 
 type TransformConfig struct {
-	Request  []TransformRule `yaml:"request"`
+	// Rules applied to request bodies, in order.
+	Request []TransformRule `yaml:"request"`
+	// Rules applied to successful response bodies, in order.
 	Response []TransformRule `yaml:"response"`
 }
 
 type TransformRule struct {
-	From    string `yaml:"from"`
-	To      string `yaml:"to"`
+	// Source path, e.g. $.username.
+	From string `yaml:"from"`
+	// Destination path, e.g. $.user.name; the value is moved there.
+	To string `yaml:"to"`
+	// Value (JSON, or a string) used when from is missing.
 	Default string `yaml:"default"`
 }
 
 type AggregationConfig struct {
+	// Services to call for each response.
 	Dependencies []DependencyConfig `yaml:"dependencies"`
 }
 
 type GraphQLConfig struct {
-	MaxQueryDepth       int           `yaml:"maxQueryDepth"`
-	MaxQueryComplexity  int           `yaml:"maxQueryComplexity"`
-	EnableIntrospection bool          `yaml:"enableIntrospection"`
-	EnableQueryCaching  bool          `yaml:"enableQueryCaching"`
-	CacheTTL            time.Duration `yaml:"cacheTTL"`
+	// Maximum nesting depth (default 10).
+	MaxQueryDepth int `yaml:"maxQueryDepth"`
+	// Maximum number of braces, a rough size limit (default 1000).
+	MaxQueryComplexity int `yaml:"maxQueryComplexity"`
+	// Allow __schema and __type queries.
+	EnableIntrospection bool `yaml:"enableIntrospection"`
+	// Not implemented yet.
+	EnableQueryCaching bool `yaml:"enableQueryCaching"`
+	// Not implemented yet.
+	CacheTTL time.Duration `yaml:"cacheTTL"`
 }
 
 type GRPCConfig struct {
-	ProtoFiles       []string `yaml:"protoFiles"`
-	ImportPaths      []string `yaml:"importPaths"`
-	EnableReflection bool     `yaml:"enableReflection"`
-	MaxMessageSize   int      `yaml:"maxMessageSize"`
-	EnableTLS        bool     `yaml:"enableTLS"`
-	TLSCertFile      string   `yaml:"tlsCertFile"`
-	TLSKeyFile       string   `yaml:"tlsKeyFile"`
+	// Not used yet (gRPC transcoding is not implemented; see the roadmap).
+	ProtoFiles []string `yaml:"protoFiles"`
+	// Not used yet.
+	ImportPaths []string `yaml:"importPaths"`
+	// Not used yet.
+	EnableReflection bool `yaml:"enableReflection"`
+	// Largest response message in bytes (default 4 MiB).
+	MaxMessageSize int `yaml:"maxMessageSize"`
+	// Connect to the gRPC upstream over TLS, verified against the system roots.
+	EnableTLS bool `yaml:"enableTLS"`
+	// Client certificate for upstream mTLS (with tlsKeyFile).
+	TLSCertFile string `yaml:"tlsCertFile"`
+	// Client key for upstream mTLS.
+	TLSKeyFile string `yaml:"tlsKeyFile"`
 }
 
 type DependencyConfig struct {
-	Service          string          `yaml:"service"`
-	Path             string          `yaml:"path"`
+	// Name of the service to call (its first target is used).
+	Service string `yaml:"service"`
+	// Path to call, with {placeholders} filled from parameterMapping.
+	Path string `yaml:"path"`
+	// Values taken from this service's response to fill the path.
 	ParameterMapping []MappingConfig `yaml:"parameterMapping"`
-	ResultMapping    []MappingConfig `yaml:"resultMapping"`
+	// Where the dependency's data goes in the response (from $ takes all of it).
+	ResultMapping []MappingConfig `yaml:"resultMapping"`
 }
 
 type MappingConfig struct {
+	// Source: a $.path, or {name} in parameterMapping.to.
 	From string `yaml:"from"`
-	To   string `yaml:"to"`
+	// Destination: a $.path, or the {placeholder} to fill.
+	To string `yaml:"to"`
 }
 
 // HealthCheckConfig holds health check configuration for backend targets
 type HealthCheckConfig struct {
+	// Check this service's targets periodically.
 	Enabled            bool          `yaml:"enabled"`
 	Interval           time.Duration `yaml:"interval"`           // How often to check (default: 30s)
 	Timeout            time.Duration `yaml:"timeout"`            // Request timeout (default: 5s)
