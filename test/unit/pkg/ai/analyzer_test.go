@@ -204,3 +204,37 @@ func TestWebhookAndExplanation(t *testing.T) {
 	assert.Len(t, sent, 1)
 	mu.Unlock()
 }
+
+type memStore struct {
+	mu    sync.Mutex
+	saved map[string]ai.Anomaly
+}
+
+func (m *memStore) SaveAnomaly(_ context.Context, a *ai.Anomaly) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.saved[a.ID] = *a
+	return nil
+}
+
+// A deviation that resolves itself is saved as resolved, and anomalies restored after a restart
+// are not left open with nothing to close them.
+func TestResolutionIsStoredAndRestoredAnomaliesAreClosed(t *testing.T) {
+	store := &memStore{saved: map[string]ai.Anomaly{}}
+	a := analyzer()
+	a.SetStore(store)
+	learn(a, "orders")
+	found := window(a, "orders", 600, 360, 20*time.Millisecond)
+	require.Len(t, found, 1)
+	window(a, "orders", 600, 6, 20*time.Millisecond)
+	require.Eventually(t, func() bool {
+		store.mu.Lock()
+		defer store.mu.Unlock()
+		return store.saved[found[0].ID].Resolved
+	}, 5*time.Second, 20*time.Millisecond)
+
+	b := analyzer()
+	b.Restore([]*ai.Anomaly{{ID: "old", Service: "orders", Type: ai.TypeErrorSpike}})
+	assert.Empty(t, b.Anomalies(ai.Filter{Open: true}))
+	assert.Len(t, b.Anomalies(ai.Filter{}), 1)
+}

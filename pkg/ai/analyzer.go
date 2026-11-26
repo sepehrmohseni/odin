@@ -249,6 +249,7 @@ func (a *Analyzer) Analyze() []*Anomaly {
 	}
 
 	var found []*Anomaly
+	var resolved []Anomaly
 	names := make([]string, 0, len(windows))
 	for name := range windows {
 		names = append(names, name)
@@ -281,11 +282,12 @@ func (a *Analyzer) Analyze() []*Anomaly {
 			active[an.Type] = true
 			found = append(found, a.track(an, now))
 		}
-		// A deviation that is over resolves its ongoing anomaly.
+		// A deviation that is over resolves its ongoing anomaly (and the stored copy).
 		for key, an := range a.ongoing {
 			if an.Service == name && !active[an.Type] {
 				an.Resolved = true
 				delete(a.ongoing, key)
+				resolved = append(resolved, *an)
 			}
 		}
 
@@ -311,6 +313,17 @@ func (a *Analyzer) Analyze() []*Anomaly {
 		if an.Windows == 1 {
 			a.publish(an)
 		}
+	}
+	if a.store != nil && len(resolved) > 0 {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			for i := range resolved {
+				if err := a.store.SaveAnomaly(ctx, &resolved[i]); err != nil {
+					a.logger.WithError(err).Warn("Failed to save a resolved anomaly")
+				}
+			}
+		}()
 	}
 	return found
 }

@@ -189,11 +189,14 @@ func (m *MongoStore) Recent(ctx context.Context, limit int64) ([]*Anomaly, error
 }
 
 // Restore adds anomalies from before a restart (newest first, as Recent returns them). They
-// are history: none is treated as ongoing.
+// are history: the baselines are learned again, so one that was still open is marked resolved
+// (if the deviation continues, a new anomaly opens) instead of staying open with nothing left
+// to close it.
 func (a *Analyzer) Restore(list []*Anomaly) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for i := len(list) - 1; i >= 0; i-- {
+		list[i].Resolved = true
 		a.anomalies = append(a.anomalies, list[i])
 	}
 	if len(a.anomalies) > a.opts.MaxStored {

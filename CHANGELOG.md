@@ -29,7 +29,8 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   service such as `deployments/grok`, MongoDB storage with retention, and an Anomalies page in the
   admin. `pkg/ai` is rewritten (COR-19): the old detector divided by zero deviations, flagged
   every user agent as a bot, analysed no service, and computed latency percentiles from request
-  sizes. `ai.flushInterval`, which no longer applies, is removed.
+  sizes. `ai.flushInterval`, which no longer applies, is removed. Anomalies that resolve
+  themselves are saved as resolved, and those restored after a restart are not left open.
 - WebAssembly plugins (`wasm`): sandboxed middleware in any language that compiles to wasm32, in
   the same phases, priorities and routes as Go plugins and working in the Docker image. A small
   JSON ABI (`odin_alloc`, `odin_handle`) lets a plugin answer the request or change its headers;
