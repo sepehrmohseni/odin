@@ -6,6 +6,12 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-26
+
+Plugins that run on requests (Go and WebAssembly), traffic anomaly detection, multi-cluster
+failover, an OpenAPI document, services from MongoDB, a redesigned admin and a demo; every
+package of the code base is now either wired in or removed.
+
 ### Added
 
 - Middleware plugins run on service routes, in three phases (`pre-auth`, `post-auth`,
@@ -111,8 +117,15 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   is a 504 instead of a 500, errors wrapping `pkg/errors` sentinels get their status, and
   server errors are logged with the request (MNT-03).
 
-### Changed
+### Changed (check these when upgrading)
 
+- Configuration keys that never had an effect are removed (Odin now warns about unknown keys):
+  `ai.flushInterval`; `wasm.cacheEnabled` and `wasm.plugins[].allowedUrls`;
+  `multiCluster.syncInterval`, `loadBalancing`, `affinityEnabled`, `affinityTTL`, and per cluster
+  `zone`, `weight` and `metadata`. `wasm.plugins[].type` is deprecated in favour of `phase`.
+- The Helm chart (0.3.0) deploys image `0.2.0` by default instead of `latest`.
+- The admin's Postman API moves from `/admin/integrations/postman/...` to
+  `/admin/api/integrations/postman/...`, and the "Distributed Traces" page is now the Request log.
 - Uploaded plugins are stored in the MongoDB collection `plugin_binaries`. Existing upload
   documents (those with a GridFS `file_id`) are moved out of `plugins` at startup; plugin records
   created through the API stay in `plugins`.
@@ -192,5 +205,6 @@ First release: the hardening pass described in docs/AUDIT.md.
   gateway (COR-14); MongoDB was disabled without `connectTimeout` (COR-18); OTLP endpoint URLs
   were rejected (COR-25); shutdown order and leaks (OPS-02); unbounded metric labels (OPS-03).
 
-[Unreleased]: https://github.com/sepehrmohseni/odin/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sepehrmohseni/odin/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sepehrmohseni/odin/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sepehrmohseni/odin/releases/tag/v0.1.0

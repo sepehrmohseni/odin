@@ -10,7 +10,7 @@ it to `ghcr.io/sepehrmohseni/odin`, signed with keyless cosign, with an SBOM and
 docker run --rm -p 8080:8080 \
   -v "$PWD/config.yaml:/app/config/config.yaml:ro" \
   -e ODIN_JWT_SECRET="$(openssl rand -hex 32)" \
-  ghcr.io/sepehrmohseni/odin:0.1.0
+  ghcr.io/sepehrmohseni/odin:0.2.0
 ```
 
 Without a mounted config, the image serves only `/health` and `/metrics`. The image cannot load
@@ -19,7 +19,7 @@ Go plugins, which need cgo.
 Verify an image signature:
 
 ```bash
-cosign verify ghcr.io/sepehrmohseni/odin:0.1.0 \
+cosign verify ghcr.io/sepehrmohseni/odin:0.2.0 \
   --certificate-identity-regexp 'https://github.com/sepehrmohseni/odin/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
@@ -56,7 +56,7 @@ templates and assets, and the default config. Run `odin` from the unpacked direc
 admin interface reads its templates relative to the working directory:
 
 ```bash
-tar xzf odin_0.1.0_linux_amd64.tar.gz && cd odin_0.1.0_linux_amd64
+tar xzf odin_0.2.0_linux_amd64.tar.gz && cd odin_0.2.0_linux_amd64
 ./odin -config config/default_config.yaml
 ```
 

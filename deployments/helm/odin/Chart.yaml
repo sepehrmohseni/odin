@@ -2,8 +2,8 @@ apiVersion: v2
 name: odin
 description: A Helm chart for Odin API Gateway
 type: application
-version: 0.2.0
-appVersion: 'latest'
+version: 0.3.0
+appVersion: '0.2.0'
 keywords:
   - api-gateway
   - microservices
