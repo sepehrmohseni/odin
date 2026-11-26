@@ -3,11 +3,11 @@
 BINARY_NAME=odin
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)"
+LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)"
 
 build:
 	@echo "Building Odin API Gateway..."
-	go build $(LDFLAGS) -o bin/$(BINARY_NAME) cmd/odin/main.go
+	go build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/odin
 
 migrate-dry-run:
 	@echo "Running MongoDB migration (dry run)..."
@@ -134,7 +134,7 @@ clean-plugins:
 
 build-all-tools:
 	@echo "Building Odin API Gateway and migration tool..."
-	go build $(LDFLAGS) -o bin/$(BINARY_NAME) cmd/odin/main.go
+	go build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/odin
 	go build $(LDFLAGS) -o bin/odin-gateway cmd/gateway/main.go
 	go build $(LDFLAGS) -o bin/odin-migrate cmd/migrate/main.go
 	@echo "✅ Built: bin/$(BINARY_NAME), bin/odin-gateway, bin/odin-migrate"

@@ -37,7 +37,11 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration `yaml:"readTimeout"`
 	WriteTimeout    time.Duration `yaml:"writeTimeout"`
 	GracefulTimeout time.Duration `yaml:"gracefulTimeout"`
-	Compression     bool          `yaml:"compression"`
+	// ReadHeaderTimeout bounds reading request headers (default 10s); IdleTimeout bounds idle
+	// keep-alive connections (default 120s).
+	ReadHeaderTimeout time.Duration `yaml:"readHeaderTimeout"`
+	IdleTimeout       time.Duration `yaml:"idleTimeout"`
+	Compression       bool          `yaml:"compression"`
 	// MaxBodySize limits request bodies on proxied routes, e.g. "10M" (default) or "512K".
 	MaxBodySize string `yaml:"maxBodySize"`
 	// TrustedProxies lists the proxy addresses or CIDRs whose X-Forwarded-For header is

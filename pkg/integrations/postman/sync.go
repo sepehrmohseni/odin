@@ -103,17 +103,45 @@ func (s *SyncEngine) Start(ctx context.Context) error {
 		return nil
 	}
 
-	interval, err := time.ParseDuration(s.config.SyncInterval)
+	interval, err := ParseSyncInterval(s.config.SyncInterval)
 	if err != nil {
-		return fmt.Errorf("invalid sync interval: %w", err)
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+		return err
 	}
 
 	s.logger.WithField("interval", interval).Info("Starting sync engine")
 
+	// The loop runs on its own context: callers pass request contexts, which end as soon as
+	// the request does (the loop used to stop at once while running stayed true). A fresh stop
+	// channel per start lets the engine be stopped and started again.
+	s.mu.Lock()
+	s.stopChan = make(chan struct{})
+	stop := s.stopChan
+	s.mu.Unlock()
+
 	s.wg.Add(1)
-	go s.syncLoop(ctx, interval)
+	go s.syncLoop(context.WithoutCancel(ctx), interval, stop)
 
 	return nil
+}
+
+// MinSyncInterval is the shortest auto-sync interval accepted.
+const MinSyncInterval = time.Minute
+
+// ParseSyncInterval parses a sync interval and rejects ones that are too short. (Zero used to
+// reach time.NewTicker and panic inside the sync goroutine; because the setting is stored in
+// MongoDB and loaded at boot, the gateway then crashed on every start.)
+func ParseSyncInterval(s string) (time.Duration, error) {
+	interval, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("invalid sync interval %q: %w", s, err)
+	}
+	if interval < MinSyncInterval {
+		return 0, fmt.Errorf("sync interval %s is shorter than the minimum of %s", interval, MinSyncInterval)
+	}
+	return interval, nil
 }
 
 // Stop stops the background sync process
@@ -127,14 +155,16 @@ func (s *SyncEngine) Stop() error {
 	s.mu.Unlock()
 
 	s.logger.Info("Stopping sync engine")
+	s.mu.Lock()
 	close(s.stopChan)
+	s.mu.Unlock()
 	s.wg.Wait()
 
 	return nil
 }
 
 // syncLoop runs the periodic sync
-func (s *SyncEngine) syncLoop(ctx context.Context, interval time.Duration) {
+func (s *SyncEngine) syncLoop(ctx context.Context, interval time.Duration, stop <-chan struct{}) {
 	defer s.wg.Done()
 
 	ticker := time.NewTicker(interval)
@@ -151,7 +181,7 @@ func (s *SyncEngine) syncLoop(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			s.logger.Info("Context cancelled, stopping sync loop")
 			return
-		case <-s.stopChan:
+		case <-stop:
 			s.logger.Info("Stop signal received, stopping sync loop")
 			return
 		case <-ticker.C:

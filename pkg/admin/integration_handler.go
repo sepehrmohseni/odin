@@ -60,7 +60,13 @@ func (h *IntegrationHandler) Initialize(ctx context.Context) error {
 		return fmt.Errorf("postman connection failed: %w", err)
 	}
 
-	// Initialize sync engine
+	// Replace the sync engine, stopping the previous one first (it used to keep running, with
+	// the old settings, until shutdown).
+	if h.syncEngine != nil && h.syncEngine.IsRunning() {
+		if err := h.syncEngine.Stop(); err != nil {
+			h.logger.WithError(err).Warn("Failed to stop the previous sync engine")
+		}
+	}
 	h.syncEngine = postman.NewSyncEngine(h.client, config, h.repository, h.logger)
 
 	// Initialize Newman runner
@@ -239,6 +245,12 @@ func (h *IntegrationHandler) SaveConfig(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "an API key is required"})
 		}
 		config.APIKey = existing.APIKey
+	}
+
+	if config.AutoSync {
+		if _, err := postman.ParseSyncInterval(config.SyncInterval); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
 	}
 
 	if err := h.repository.SaveConfig(ctx, &config); err != nil {

@@ -2,29 +2,37 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	// Added missing time import
 	"odin/pkg/config"
 	"odin/pkg/gateway"
 	"odin/pkg/logging"
 )
 
+// version and buildTime are set at build time (see the Makefile and Dockerfile).
 var (
-	configPath string
-	version    = "dev"
+	version   = "dev"
+	buildTime = ""
 )
 
-func init() {
-	flag.StringVar(&configPath, "config", "config/config.yaml", "Path to configuration file")
-	flag.Parse()
-}
-
 func main() {
+	var configPath string
+	var showVersion bool
+	flag.StringVar(&configPath, "config", "config/config.yaml", "Path to configuration file")
+	flag.BoolVar(&showVersion, "version", false, "Print the version and exit")
+	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("odin %s %s\n", version, buildTime)
+		return
+	}
+
 	logger := logging.NewLogger()
 
 	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
@@ -114,10 +122,8 @@ func main() {
 
 	// Start the server in a goroutine
 	go func() {
-		if err := gw.Start(); err != nil {
-			if err.Error() != "http: Server closed" {
-				logger.Fatalf("Failed to start server: %v", err)
-			}
+		if err := gw.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatalf("Failed to start server: %v", err)
 		}
 	}()
 
@@ -129,16 +135,16 @@ func main() {
 	reload := make(chan os.Signal, 1)
 	signal.Notify(reload, syscall.SIGHUP)
 
+	// Live reload is not implemented: SIGHUP only checks the file, so a restart can be planned
+	// with confidence. (It used to log "Configuration reloaded successfully" without applying
+	// anything.)
 	go func() {
-		for {
-			<-reload
-			logger.Info("Received SIGHUP, reloading configuration")
-			// Fix: Remove the unused newConfig variable
+		for range reload {
+			logger.Info("Received SIGHUP: validating the configuration file")
 			if _, err := config.Load(configPath, logger); err != nil {
-				logger.Errorf("Failed to reload configuration: %v", err)
+				logger.Errorf("Configuration is invalid: %v", err)
 			} else {
-				// Apply updated configuration (implementation depends on your design)
-				logger.Info("Configuration reloaded successfully")
+				logger.Warn("Configuration is valid. Live reload is not supported yet; restart the gateway to apply changes")
 			}
 		}
 	}()

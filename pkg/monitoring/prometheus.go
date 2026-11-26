@@ -41,7 +41,7 @@ var (
 	activeRequests = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "api_gateway_active_requests",
-			Help: "Currently active requests",
+			Help: "Requests in flight (service label: all)",
 		},
 		[]string{"service"},
 	)
@@ -76,22 +76,24 @@ func Register(e *echo.Echo, path string) {
 	e.Use(MetricsMiddleware)
 }
 
+// MetricsMiddleware records request metrics. The service label is the name of the service the
+// request was routed to, or "gateway" for the gateway's own endpoints and unmatched paths. (It
+// used to be the first path segment, which any client could set to a new value per request,
+// growing the number of time series without bound.)
 func MetricsMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		path := c.Request().URL.Path
-		service := "unknown"
-
-		parts := splitPath(path)
-		if len(parts) > 1 {
-			service = parts[1]
-		}
-
-		activeRequests.WithLabelValues(service).Inc()
-		defer activeRequests.WithLabelValues(service).Dec()
+		inFlight := activeRequests.WithLabelValues("all")
+		inFlight.Inc()
+		defer inFlight.Dec()
 
 		start := time.Now()
 
 		err := next(c)
+
+		service, _ := c.Get("service_name").(string)
+		if service == "" {
+			service = "gateway"
+		}
 
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(c.Response().Status)
@@ -115,22 +117,4 @@ func MetricsMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 		return err
 	}
-}
-
-func splitPath(path string) []string {
-	var parts []string
-	start := 0
-	for i := 0; i < len(path); i++ {
-		if path[i] == '/' {
-			if start < i {
-				parts = append(parts, path[start:i])
-			}
-			parts = append(parts, "/")
-			start = i + 1
-		}
-	}
-	if start < len(path) {
-		parts = append(parts, path[start:])
-	}
-	return parts
 }

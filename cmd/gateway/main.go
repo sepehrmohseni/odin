@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -92,20 +94,25 @@ func main() {
 		log.Fatalf("Failed to initialize gateway: %v", err)
 	}
 
-	go func() {
-		if err := gw.Start(); err != nil {
-			if err.Error() != "http: Server closed" {
-				log.Errorf("Server error: %v", err)
-			}
-		}
-	}()
+	// A failed start (port in use, ...) ends the process instead of leaving it waiting for a
+	// signal with nothing listening.
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- gw.Start() }()
 
 	log.Infof("API Gateway started on port %d", cfg.Server.Port)
-	log.Infof("Admin interface available at http://localhost:%d/admin", cfg.Server.Port)
+	if cfg.Admin.Enabled {
+		log.Infof("Admin interface available at http://localhost:%d/admin", cfg.Server.Port)
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case <-quit:
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Server error: %v", err)
+		}
+	}
 
 	log.Info("Shutting down server...")
 

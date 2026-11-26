@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -45,6 +46,7 @@ type Gateway struct {
 	tracingManager  *tracing.Manager
 	healthCheckers  []*health.TargetChecker
 	rateLimiter     *ratelimit.Limiter
+	closers         []io.Closer // gRPC client connections
 	alertManager    *health.AlertManager
 	meshManager     *servicemesh.Manager
 	mongoRepo       mongodb.Repository
@@ -335,12 +337,15 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 				logger.WithError(err).Warn("Failed to initialize Postman integration repository")
 			} else {
 				integrationHandler := admin.NewIntegrationHandler(integrationRepo, logger)
-				if err := integrationHandler.Initialize(context.Background()); err != nil {
-					logger.WithError(err).Warn("Failed to initialize Postman integration")
+				initCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				if err := integrationHandler.Initialize(initCtx); err != nil {
+					logger.WithError(err).Warn("Postman integration is not connected; fix its settings in the admin")
 				} else {
-					adminHandler.SetIntegrationHandler(integrationHandler)
 					logger.Info("Postman integration initialized")
 				}
+				cancel()
+				// Register the admin pages either way: they are where a bad API key is fixed.
+				adminHandler.SetIntegrationHandler(integrationHandler)
 			}
 		}
 	} // Load plugins from config if enabled (for backward compatibility)
@@ -448,7 +453,8 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 					CacheTTL:            svcConfig.GraphQL.CacheTTL,
 				}
 				graphqlProxy := graphql.NewProxy(graphqlConfig, logger)
-				graphqlProxy.RegisterRoutes(e, svcConfig.BasePath, serviceAuth(svcConfig, authMiddleware)...)
+				graphqlProxy.RegisterRoutes(e, svcConfig.BasePath,
+					append([]echo.MiddlewareFunc{routing.ServiceLabel(svcConfig.Name)}, serviceAuth(svcConfig, authMiddleware)...)...)
 				logger.WithField("service", svcConfig.Name).Info("GraphQL proxy registered")
 			}
 		case "grpc":
@@ -466,7 +472,9 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 				if err != nil {
 					logger.WithError(err).Warnf("Failed to create gRPC proxy for service %s", svcConfig.Name)
 				} else {
-					grpcProxy.RegisterRoutes(e, svcConfig.BasePath, serviceAuth(svcConfig, authMiddleware)...)
+					grpcProxy.RegisterRoutes(e, svcConfig.BasePath,
+						append([]echo.MiddlewareFunc{routing.ServiceLabel(svcConfig.Name)}, serviceAuth(svcConfig, authMiddleware)...)...)
+					gateway.closers = append(gateway.closers, grpcProxy)
 					logger.WithField("service", svcConfig.Name).Info("gRPC proxy registered")
 				}
 			}
@@ -641,22 +649,34 @@ func (g *Gateway) Handler() http.Handler {
 func (g *Gateway) Start() error {
 	addr := fmt.Sprintf(":%d", g.config.Server.Port)
 
+	srv := g.config.Server
 	s := &http.Server{
 		Addr:         addr,
-		ReadTimeout:  g.config.Server.ReadTimeout,
-		WriteTimeout: g.config.Server.WriteTimeout,
+		ReadTimeout:  srv.ReadTimeout,
+		WriteTimeout: srv.WriteTimeout,
+		// Bound how long a client may take to send its headers (slowloris) and how long idle
+		// keep-alive connections are held; neither was set.
+		ReadHeaderTimeout: durationOr(srv.ReadHeaderTimeout, 10*time.Second),
+		IdleTimeout:       durationOr(srv.IdleTimeout, 120*time.Second),
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	g.logger.Infof("Server starting on %s", addr)
 	return g.server.StartServer(s)
 }
 
-func (g *Gateway) Shutdown(ctx context.Context) error {
-	if g.rateLimiter != nil {
-		if err := g.rateLimiter.Close(); err != nil {
-			g.logger.WithError(err).Warn("Error closing the rate limiter")
-		}
+func durationOr(d, fallback time.Duration) time.Duration {
+	if d > 0 {
+		return d
 	}
+	return fallback
+}
+
+// Shutdown stops accepting requests and waits for in-flight ones (until ctx ends), then stops
+// the background work and closes connections. Spans still buffered are flushed to the tracing
+// backend.
+func (g *Gateway) Shutdown(ctx context.Context) error {
+	serverErr := g.server.Shutdown(ctx)
 
 	g.logger.Info("Stopping health monitoring...")
 	for _, checker := range g.healthCheckers {
@@ -665,12 +685,10 @@ func (g *Gateway) Shutdown(ctx context.Context) error {
 	if g.alertManager != nil {
 		g.alertManager.Stop()
 	}
-	g.logger.Info("Health monitoring stopped")
 
 	// Stop Postman integration if initialized
 	if g.adminHandler != nil {
-		integrationHandler := g.adminHandler.GetIntegrationHandler()
-		if integrationHandler != nil {
+		if integrationHandler := g.adminHandler.GetIntegrationHandler(); integrationHandler != nil {
 			g.logger.Info("Stopping Postman integration...")
 			if err := integrationHandler.Shutdown(); err != nil {
 				g.logger.WithError(err).Warn("Error stopping Postman integration")
@@ -679,14 +697,35 @@ func (g *Gateway) Shutdown(ctx context.Context) error {
 	}
 
 	// Stop service mesh integration
-	if g.meshManager != nil {
+	if g.meshManager != nil && g.config.ServiceMesh.Enabled {
 		g.logger.Info("Stopping service mesh integration...")
 		if err := g.meshManager.Stop(); err != nil {
 			g.logger.WithError(err).Warn("Error stopping service mesh")
 		}
 	}
 
-	return g.server.Shutdown(ctx)
+	for _, c := range g.closers {
+		if err := c.Close(); err != nil {
+			g.logger.WithError(err).Warn("Error closing an upstream connection")
+		}
+	}
+	if g.rateLimiter != nil {
+		if err := g.rateLimiter.Close(); err != nil {
+			g.logger.WithError(err).Warn("Error closing the rate limiter")
+		}
+	}
+	if g.tracingManager != nil {
+		if err := g.tracingManager.Shutdown(ctx); err != nil {
+			g.logger.WithError(err).Warn("Error flushing traces")
+		}
+	}
+	if g.mongoRepo != nil {
+		if err := g.mongoRepo.Close(ctx); err != nil {
+			g.logger.WithError(err).Warn("Error closing MongoDB")
+		}
+	}
+
+	return serverErr
 }
 
 // serviceAuth returns the authentication middleware for a service that requires it.

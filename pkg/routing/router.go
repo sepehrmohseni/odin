@@ -89,6 +89,9 @@ func (r *Router) RegisterRoutes() error {
 		// Create route group
 		group := r.echo.Group(svc.BasePath)
 
+		// Name the service for metrics and logs before anything can reject the request.
+		group.Use(ServiceLabel(svc.Name))
+
 		// Authentication runs first, so nothing below (including the cache) can answer an
 		// unauthenticated request.
 		if svc.Authentication && r.authMiddleware != nil {
@@ -117,6 +120,19 @@ func (r *Router) RegisterRoutes() error {
 	}
 
 	return nil
+}
+
+// ServiceLabelKey is the context key holding the name of the service a request was routed to.
+const ServiceLabelKey = "service_name"
+
+// ServiceLabel records which service a request belongs to, for metrics and the admin monitor.
+func ServiceLabel(name string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Set(ServiceLabelKey, name)
+			return next(c)
+		}
+	}
 }
 
 func (r *Router) RegisterHealthRoutes() {

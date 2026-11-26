@@ -141,6 +141,7 @@ type AlertManager struct {
 	logger       *logrus.Logger
 	alertQueue   chan Alert
 	stopChan     chan struct{}
+	stopOnce     sync.Once
 	wg           sync.WaitGroup
 	minInterval  time.Duration
 	lastAlerts   map[string]time.Time
@@ -175,9 +176,11 @@ func (am *AlertManager) Start() {
 }
 
 // Stop stops processing alerts
+// Stop stops processing alerts. It can be called more than once; alerts sent afterwards are
+// dropped. (The queue used to be closed here, so a late alert panicked with "send on closed
+// channel".)
 func (am *AlertManager) Stop() {
-	close(am.stopChan)
-	close(am.alertQueue)
+	am.stopOnce.Do(func() { close(am.stopChan) })
 	am.wg.Wait()
 	am.logger.Info("Alert manager stopped")
 }
@@ -193,6 +196,11 @@ func (am *AlertManager) SendAlert(alert Alert) {
 		return
 	}
 
+	select {
+	case <-am.stopChan:
+		return
+	default:
+	}
 	select {
 	case am.alertQueue <- alert:
 	default:

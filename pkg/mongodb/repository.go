@@ -29,11 +29,20 @@ func NewRepository(config *Config, logger *logrus.Logger) (Repository, error) {
 		return &noopRepository{}, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), config.ConnectTimeout)
+	// Without a connectTimeout the context below expired immediately, so the ping always failed
+	// and MongoDB was silently disabled even when reachable.
+	connectTimeout := config.ConnectTimeout
+	if connectTimeout <= 0 {
+		connectTimeout = 10 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
 
-	// Create client options
-	clientOpts := options.Client().ApplyURI(config.URI)
+	// Create client options. The client-wide timeout bounds every operation that is given a
+	// context without a deadline, so a hung server cannot stall startup or requests forever.
+	clientOpts := options.Client().ApplyURI(config.URI).
+		SetServerSelectionTimeout(connectTimeout).
+		SetTimeout(30 * time.Second)
 
 	// Set connection pool options
 	if config.MaxPoolSize > 0 {
@@ -43,10 +52,7 @@ func NewRepository(config *Config, logger *logrus.Logger) (Repository, error) {
 		clientOpts.SetMinPoolSize(uint64(config.MinPoolSize))
 	}
 
-	// Set timeouts
-	if config.ConnectTimeout > 0 {
-		clientOpts.SetConnectTimeout(config.ConnectTimeout)
-	}
+	clientOpts.SetConnectTimeout(connectTimeout)
 
 	// Set authentication
 	if config.Auth.Username != "" {
@@ -79,6 +85,8 @@ func NewRepository(config *Config, logger *logrus.Logger) (Repository, error) {
 
 	// Ping to verify connection
 	if err := client.Ping(ctx, nil); err != nil {
+		// Release the client's background monitors (they leaked).
+		_ = client.Disconnect(context.Background())
 		return nil, fmt.Errorf("failed to ping MongoDB: %w", err)
 	}
 
@@ -91,8 +99,10 @@ func NewRepository(config *Config, logger *logrus.Logger) (Repository, error) {
 		logger:   logger,
 	}
 
-	// Create indexes
-	if err := repo.createIndexes(ctx); err != nil {
+	// Create indexes (with their own deadline; the connect one may be nearly used up)
+	indexCtx, indexCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer indexCancel()
+	if err := repo.createIndexes(indexCtx); err != nil {
 		logger.WithError(err).Warn("Failed to create indexes")
 	}
 
