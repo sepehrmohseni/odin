@@ -47,33 +47,69 @@ Critical and high items that are contained enough to finish in the current harde
 
 ## Next
 
-Medium items, and changes that alter behaviour or stored data and so need the owner's decision
-first. Effort: S = hours, M = a day or two, L = a week or more.
+In order, as the owner decided on 2026-11-26. Effort: S = hours, M = a day or two, L = a week or
+more.
 
-| Item | Finding | Effort | Why it waits |
-| --- | --- | --- | --- |
-| `OAuth2Middleware`: validate tokens (introspection/OIDC) or remove it | [SEC-15](docs/AUDIT.md#security) | M | Exported API; removing it is a breaking change |
-| gRPC transcoding through server reflection and `dynamicpb` | [COR-09](docs/AUDIT.md#correctness) | L | New design; current behaviour never worked |
-| GraphQL: allow `__typename`, forward headers, keep upstream status, implement or drop query caching | [COR-10](docs/AUDIT.md#correctness) | S | Changes what clients receive |
-| Admin UI talks to the real API (JSON tags on config, `OdinAPI` methods, Postman routes) | [COR-12](docs/AUDIT.md#correctness) | M | Adds JSON field names to the config API |
-| One writer goroutine per monitoring WebSocket client | [COR-13](docs/AUDIT.md#correctness) | S | — |
-| Warn about unknown config keys (strict decoding with fallback) | [COR-24](docs/AUDIT.md#correctness) | S | Noisy for existing configs at first |
-| Newman runner: temp file, JSON reporter, correct TLS flag, timeouts | [SEC-26](docs/AUDIT.md#security) | S | — |
-| Raise `pkg/` coverage (now measured; was 9.5 %) and replace tests that re-implement code | [TST-01](docs/AUDIT.md#tests), TST-03, TST-05 | M | — |
+### 1. Small fixes, then release v0.2.0
+
+| Item | Finding | Effort |
+| --- | --- | --- |
+| Postman page calls `/admin/api/integrations/...`; the routes are `/admin/integrations/...` | [COR-12](docs/AUDIT.md#correctness) | S |
+| GraphQL: allow `__typename`, forward headers, keep the upstream status, implement or drop query caching | [COR-10](docs/AUDIT.md#correctness) | S |
+| One writer goroutine per monitoring WebSocket client | [COR-13](docs/AUDIT.md#correctness) | S |
+| Warn about unknown config keys (they are silently ignored) | [COR-24](docs/AUDIT.md#correctness) | S |
+| Newman runner: temp file, JSON reporter, correct TLS flag, timeouts | [SEC-26](docs/AUDIT.md#security) | S |
+| Remove the committed sample JWTs; generate tokens at test time | [SEC-27](docs/AUDIT.md#security) | S |
+| Records: COR-28 (fixed by the OpenAPI rewrite), "What works today" | — | S |
+| Demo: retake the screenshots with the Anomalies page | — | S |
+| Release v0.2.0 (binaries, signed multi-arch image), then check it end to end | [OPS-07](docs/AUDIT.md#operations) | S |
+
+### 2. OpenID Connect authentication
+
+| Item | Finding | Effort |
+| --- | --- | --- |
+| Per-service OIDC: validate bearer tokens against the provider's JWKS (discovery, key rotation, issuer, audience, scopes), replacing the unsafe `OAuth2Middleware` | [SEC-15](docs/AUDIT.md#security) | M |
+
+### 3. Gateway parity with APISIX, Kong and NGINX
+
+| Item | Effort |
+| --- | --- |
+| `docs/COMPARISON.md`: an honest feature comparison, kept current | S |
+| Load balancing: weighted, least-connections, consistent hashing (by header, cookie or client IP) | M |
+| Built-in plugins: key-auth, basic-auth, CORS, IP allow/deny | M |
+| Request IDs: generate or pass on `X-Request-ID`, in logs, traces and the admin request log | S |
+| Kubernetes Gateway API support | L |
+
+### 4. Tests
+
+| Item | Finding | Effort |
+| --- | --- | --- |
+| Raise `pkg/` coverage; replace tests that re-implement code instead of testing it | [TST-01](docs/AUDIT.md#tests), TST-03, TST-05 | M |
+
+### 5. gRPC transcoding
+
+| Item | Finding | Effort |
+| --- | --- | --- |
+| JSON-to-gRPC through server reflection and `dynamicpb` (the current code never worked) | [COR-09](docs/AUDIT.md#correctness) | L |
+
+### 6. Reload, discovery and TLS
+
+| Item | Finding | Effort |
+| --- | --- | --- |
+| Live configuration reload without dropping connections | [COR-23](docs/AUDIT.md#correctness) | L |
+| Service discovery for Consul, Istio and Linkerd | [COR-29](docs/AUDIT.md#correctness) | M |
+| Upstream mTLS per service | [COR-29](docs/AUDIT.md#correctness) | S |
+| TLS termination with SNI (certificates per host) | — | M |
 
 ## Later
 
-- Live configuration reload without dropping connections ([COR-23](docs/AUDIT.md#correctness))
-- Real service discovery for Consul, Istio and Linkerd, and upstream mTLS
-  ([COR-29](docs/AUDIT.md#correctness))
-- OpenAPI generation that is valid OpenAPI ([COR-28](docs/AUDIT.md#correctness))
 - Encrypt integration credentials at rest ([SEC-22](docs/AUDIT.md#security))
 - One service config type instead of field-by-field copies ([MNT-05](docs/AUDIT.md#maintainability))
 - Major upgrades: Echo v5, mongo-driver v2 ([MNT-06](docs/AUDIT.md#maintainability))
 - Fold the `docs/GOAL-*` status reports into real documentation ([DOC-05](docs/AUDIT.md#documentation))
-- Gateway features that do not exist yet: weighted, least-connections and consistent-hash load
-  balancing; key-auth, basic auth, CORS and IP allow/deny plugins; request IDs; TLS termination
-  with SNI; Kubernetes Gateway API support; a docs site
+- Documentation site: Material for MkDocs reaches end of life in May 2027; move to its successor
+  (Zensical) before then
+- Try the GitHub Codespaces demo in a real codespace (uses the owner's quota)
 
 ## What works today
 
@@ -88,7 +124,13 @@ HTTP backends:
 - Response caching (memory or Redis) that respects authentication and Cache-Control
 - Canary routing by header, cookie or weight; template and field-mapping transformations;
   response enrichment from aggregation dependencies; `/aggregate`
+- Multi-cluster failover or traffic sharing with health-checked clusters
 - WebSocket and server-sent-event proxying; GraphQL proxying with depth and introspection limits
-- Prometheus metrics, OpenTelemetry tracing with context propagation, structured access logs
-- Admin web interface and API (opt-in, authenticated), Go plugin upload with static validation
-- MongoDB storage for plugins and Postman integration settings
+- Middleware plugins in Go and WebAssembly, in three phases of each service's pipeline; hook
+  plugins
+- Prometheus metrics, OpenTelemetry tracing with context propagation, structured access logs,
+  traffic anomaly detection with webhook alerts
+- A generated OpenAPI document with Swagger UI
+- Admin web interface and API (opt-in, authenticated): dashboard, monitoring, request log,
+  anomalies, middleware chain, settings, plugins, Postman
+- MongoDB storage for plugins, services, anomalies and Postman integration settings
