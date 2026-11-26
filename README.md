@@ -1,9 +1,16 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo.svg">
+  <img src="docs/assets/logo-dark.svg" alt="Odin" width="140">
+</picture>
+
 # Odin API Gateway
 
 [![CI](https://github.com/sepehrmohseni/odin/actions/workflows/ci.yml/badge.svg)](https://github.com/sepehrmohseni/odin/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go)](go.mod)
+[![Docs](https://img.shields.io/badge/docs-sepehrmohseni.github.io%2Fodin-0b6e7a)](https://sepehrmohseni.github.io/odin/)
+[![Release](https://img.shields.io/github/v/release/sepehrmohseni/odin)](https://github.com/sepehrmohseni/odin/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An API gateway written in Go: routing, authentication, rate limiting, caching, resilience and
@@ -30,7 +37,7 @@ open http://localhost:8080/admin              # admin interface (login printed b
 scripts/quickstart.sh --down                  # stop
 ```
 
-[docs/getting-started.md](docs/getting-started.md) covers this and the other ways to install
+The [documentation site](https://sepehrmohseni.github.io/odin/) covers this and the other ways to install
 (plain Docker image, binary, Helm), your first routes and the admin interface.
 
 ## Features
