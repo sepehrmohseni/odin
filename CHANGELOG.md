@@ -12,6 +12,14 @@ and versions follow [Semantic Versioning](https://semver.org/). Finding IDs refe
   `pre-proxy`) ordered by priority and limited to their routes; enabling or disabling one takes
   effect on the next request. Programs embedding the gateway can register compiled-in plugins
   with `Gateway.Plugins()` (SEC-14).
+- WebAssembly plugins (`wasm`): sandboxed middleware in any language that compiles to wasm32, in
+  the same phases, priorities and routes as Go plugins and working in the Docker image. A small
+  JSON ABI (`odin_alloc`, `odin_handle`) lets a plugin answer the request or change its headers;
+  each request is interrupted at the plugin's timeout (SEC-28), instances are pooled
+  (`maxInstances`) and memory-capped (`maxMemoryPages`), and a plugin that fails to load stops
+  startup. Example: `examples/wasm-plugins/api-key`. Config: `phase`, `routes`, `readBody` and
+  `failOpen` are new; `allowedUrls` and `cacheEnabled`, which never had an effect, are removed;
+  `type` is deprecated (`auth` means `phase: pre-auth`).
 - `openapi`: an OpenAPI 3 document of the service routes at `/openapi.json` and `/openapi.yaml`,
   and Swagger UI at `openapi.uiPath`. The document describes only what the gateway knows (paths,
   methods, JWT requirement, rate-limit and gateway error responses), never upstream addresses;

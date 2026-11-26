@@ -225,21 +225,23 @@ the main file. For a guided introduction see [Concepts](../concepts.md).
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `wasm.enabled` | boolean |  |
-| `wasm.pluginDir` | string |  |
-| `wasm.plugins` | list of objects |  |
-| `wasm.plugins[].name` | string |  |
-| `wasm.plugins[].path` | string |  |
-| `wasm.plugins[].type` | string | request, response, auth, ratelimit, middleware, aggregation |
-| `wasm.plugins[].enabled` | boolean |  |
-| `wasm.plugins[].priority` | integer |  |
-| `wasm.plugins[].config` | map of string to any |  |
-| `wasm.plugins[].timeout` | duration |  |
-| `wasm.plugins[].allowedUrls` | list of string |  |
-| `wasm.plugins[].services` | list of string |  |
-| `wasm.maxMemoryPages` | integer |  |
-| `wasm.maxInstances` | integer |  |
-| `wasm.cacheEnabled` | boolean |  |
+| `wasm.enabled` | boolean | Load the WebAssembly middleware plugins below into the request pipeline. |
+| `wasm.pluginDir` | string | Directory that relative plugin paths are resolved against. |
+| `wasm.plugins` | list of objects | The plugins. |
+| `wasm.plugins[].name` | string | Unique name, shown on the admin's Middleware page. |
+| `wasm.plugins[].path` | string | The .wasm file, absolute or relative to pluginDir. |
+| `wasm.plugins[].enabled` | boolean | Load it; disabled plugins are skipped. |
+| `wasm.plugins[].phase` | string | Pipeline phase: pre-auth, post-auth (default) or pre-proxy. |
+| `wasm.plugins[].type` | string | Deprecated: use phase. "auth" means pre-auth; other values mean post-auth. |
+| `wasm.plugins[].priority` | integer | Order within the phase; lower runs first. |
+| `wasm.plugins[].routes` | list of string | Path patterns it applies to (default ["*"], every service route). |
+| `wasm.plugins[].services` | list of string | Service names it applies to; empty means every service its routes match. |
+| `wasm.plugins[].config` | map of string to any | Handed to the plugin with every request. |
+| `wasm.plugins[].timeout` | duration | Per-request limit; the call is interrupted when it is exceeded (default 100ms). |
+| `wasm.plugins[].readBody` | boolean | Hand the request body (up to 1 MiB) to the plugin. |
+| `wasm.plugins[].failOpen` | boolean | On a plugin error or timeout, let the request continue instead of answering 500. |
+| `wasm.maxMemoryPages` | integer | Memory limit of each plugin instance in 64 KiB pages (default 512, 32 MiB). |
+| `wasm.maxInstances` | integer | Instances per plugin, which is how many requests one plugin handles at a time (default 4). |
 
 ## `multiCluster`
 

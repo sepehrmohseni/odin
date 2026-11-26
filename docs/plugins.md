@@ -6,10 +6,12 @@ gateway process with full access, so load only plugins you trust.
 
 !!! note
     The Docker image is built without cgo and cannot load Go plugins. Use a binary built with
-    `CGO_ENABLED=1` on a glibc system.
+    `CGO_ENABLED=1` on a glibc system, or write a [WebAssembly plugin](#webassembly-plugins),
+    which works everywhere.
 
-There are two kinds of plugins: **middleware plugins**, which sit in a service's request
-pipeline, and **hook plugins**, which are called at fixed points of every request.
+There are three kinds of plugins: **middleware plugins** (Go shared objects) and
+**WebAssembly plugins**, which sit in a service's request pipeline, and **hook plugins**, which
+are called at fixed points of every request.
 
 ## Middleware plugins
 
@@ -89,6 +91,112 @@ Enabling and disabling take effect on the next request, without a restart. The a
   (`plugins.directory`, default `/var/odin/plugins`).
 
 Plugin names may only contain letters, digits, `.`, `_`, `+` and `-`.
+
+## WebAssembly plugins
+
+A WebAssembly plugin runs in the same pipeline as a middleware plugin (same phases, priorities
+and routes, and it shows on the admin's **Middleware** page), but in a sandbox: it has no file
+system, network or environment, its memory is capped, and each request it handles is
+interrupted at a timeout. Plugins can be written in any language that compiles to wasm32, and
+they work in the Docker image (no cgo needed).
+
+```yaml
+wasm:
+  enabled: true
+  pluginDir: /etc/odin/plugins
+  maxInstances: 4          # requests one plugin handles at a time (default 4)
+  maxMemoryPages: 512      # memory per instance, in 64 KiB pages (default 512 = 32 MiB)
+  plugins:
+    - name: api-key
+      path: api-key.wasm
+      enabled: true
+      phase: pre-auth      # pre-auth, post-auth (default) or pre-proxy
+      priority: 10
+      routes: ["/api/*"]   # default ["*"]
+      services: []         # limit to these services (default: all its routes match)
+      timeout: 100ms       # per request (default 100ms)
+      readBody: false      # hand it the request body, up to 1 MiB
+      failOpen: false      # on a plugin error, continue instead of answering 500
+      config:              # handed to the plugin with every request
+        keys: {k-123: mobile-app}
+```
+
+A plugin that cannot be loaded stops the gateway from starting, so a missing authentication
+plugin never leaves its routes open. When a plugin fails or times out on a request, the client
+gets a 500 (unless `failOpen`), the error is logged with the plugin's name, and the next request
+gets a fresh instance.
+
+### Writing one
+
+The module exports its `memory` and two functions:
+
+| Export | Signature | What |
+| --- | --- | --- |
+| `odin_alloc` | `(size i32) -> i32` | Returns an address where the gateway may write `size` bytes of input |
+| `odin_handle` | `(ptr i32, size i32) -> i64` | Handles the input; returns the output's address in the high 32 bits and its length in the low 32 |
+
+It may import `env.log(ptr i32, len i32)` to write a line to the gateway's log, and WASI for
+its language runtime (clocks and random numbers are real; there are no files or arguments).
+
+The input is JSON:
+
+```json
+{
+  "service": "orders",
+  "user": "usr-001",
+  "request": {
+    "method": "GET",
+    "path": "/api/orders",
+    "query": "page=2",
+    "headers": {"X-Api-Key": "k-123"},
+    "remoteAddr": "203.0.113.7",
+    "body": ""
+  },
+  "config": {"keys": {"k-123": "mobile-app"}}
+}
+```
+
+`user` is set after authentication (post-auth and pre-proxy), `body` only with `readBody`.
+Header values with several entries are joined with `, `.
+
+The output is JSON too. `"action": "respond"` answers the client and stops the request;
+anything else (or an empty output) lets it continue:
+
+```json
+{"action": "respond", "status": 401, "headers": {"Content-Type": "application/json"}, "body": "{\"message\":\"no key\"}"}
+```
+
+```json
+{
+  "action": "continue",
+  "setHeaders": {"X-Consumer": "mobile-app"},
+  "removeHeaders": ["X-Api-Key"],
+  "responseHeaders": {"X-Checked-By": "wasm-api-key"}
+}
+```
+
+`setHeaders` and `removeHeaders` change the request before the next step (and the upstream);
+`responseHeaders` are set on the response to the client.
+
+[examples/wasm-plugins/api-key](https://github.com/sepehrmohseni/odin/tree/main/examples/wasm-plugins/api-key)
+is a complete plugin in Go; build it with:
+
+```bash
+GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o api-key.wasm ./examples/wasm-plugins/api-key
+```
+
+Instances are reused across requests, so a plugin may keep state in memory, but it must not
+rely on it: an instance is replaced after an error or timeout, and several run at once.
+
+### Cost
+
+On an Intel Core i5-10500 with six cores given to Docker, a proxied `GET` to a local backend took
+89 µs without plugins and 328 µs with the Go-built API key plugin (about 0.24 ms per request,
+most of it the plugin's JSON handling in the Go WebAssembly runtime). To reproduce:
+
+```bash
+scripts/docker-check.sh -- go test -run x -bench WASMPlugin -benchmem ./test/unit/pkg/gateway/
+```
 
 ## Hook plugins
 

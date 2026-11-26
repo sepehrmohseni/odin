@@ -1,13 +1,24 @@
+// Package wasm runs WebAssembly middleware plugins in the request pipeline.
+//
+// A plugin is a WebAssembly module (any language that compiles to wasm32, for example Go with
+// GOOS=wasip1 and -buildmode=c-shared, Rust, or TinyGo) that exports:
+//
+//	memory
+//	odin_alloc(size i32) i32              returns where the host may write size bytes of input
+//	odin_handle(ptr i32, size i32) i64    handles the JSON input at ptr; returns the JSON output's
+//	                                      address in the high 32 bits and its length in the low 32
+//
+// The input and output are described by Input and Output. A plugin runs in a sandbox: no
+// file system, no network, no environment; it may import env.log(ptr, len i32) to write to the
+// gateway's log, and WASI for its language runtime (clocks, random numbers).
 package wasm
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/rand"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -16,411 +27,135 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-// wasmRuntime implements the Runtime interface using wazero
-type wasmRuntime struct {
-	config  *Config
-	logger  *logrus.Logger
-	runtime wazero.Runtime
-	plugins map[string]*wasmPlugin
-	modules map[string]wazero.CompiledModule // Cached compiled modules
-	mu      sync.RWMutex
-	ctx     context.Context
-	cancel  context.CancelFunc
+// Defaults for Options.
+const (
+	DefaultMaxMemoryPages = 512 // 32 MiB per instance
+	DefaultMaxInstances   = 4
+	DefaultTimeout        = 100 * time.Millisecond
+)
+
+// Options configure a Runtime.
+type Options struct {
+	// Directory that relative plugin paths are resolved against.
+	PluginDir string
+	// Memory limit of each plugin instance, in 64 KiB pages.
+	MaxMemoryPages int
+	// Instances per plugin, which is how many requests one plugin handles at a time.
+	MaxInstances int
 }
 
-// wasmPlugin implements the Plugin interface
-type wasmPlugin struct {
-	config    *PluginConfig
-	runtime   *wasmRuntime
-	module    api.Module
-	exports   map[string]api.Function
-	instances int
-	mu        sync.Mutex
+// Runtime compiles and runs plugins. Plugins compiled by one Runtime share its host functions
+// and limits; Close releases all of them.
+type Runtime struct {
+	opts   Options
+	logger *logrus.Logger
+	r      wazero.Runtime
 }
 
-// NewRuntime creates a new WASM runtime
-func NewRuntime(config *Config, logger *logrus.Logger) (Runtime, error) {
-	if !config.Enabled {
-		logger.Info("WASM runtime is disabled")
-		return &noopRuntime{}, nil
+type pluginNameKey struct{}
+
+// NewRuntime creates a runtime. Function calls are interrupted when their context ends, so a
+// plugin timeout is enforced even inside an endless loop. (The previous runtime did not set
+// this, so timeouts were not enforced: AUDIT SEC-28.)
+func NewRuntime(opts Options, logger *logrus.Logger) (*Runtime, error) {
+	if opts.MaxMemoryPages <= 0 {
+		opts.MaxMemoryPages = DefaultMaxMemoryPages
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Create wazero runtime with configuration
-	if config.MaxMemoryPages <= 0 || config.MaxMemoryPages > 65536 {
-		config.MaxMemoryPages = 65536 // the wasm32 maximum (4 GiB)
+	if opts.MaxMemoryPages > 65536 {
+		opts.MaxMemoryPages = 65536
 	}
-	runtimeConfig := wazero.NewRuntimeConfig().
-		WithMemoryLimitPages(uint32(config.MaxMemoryPages)) //nolint:gosec // bounded above
-
-	if config.CacheEnabled {
-		// Enable compilation cache
-		cache := wazero.NewCompilationCache()
-		runtimeConfig = runtimeConfig.WithCompilationCache(cache)
+	if opts.MaxInstances <= 0 {
+		opts.MaxInstances = DefaultMaxInstances
 	}
+	ctx := context.Background()
+	r := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
+		WithCloseOnContextDone(true).
+		WithMemoryLimitPages(uint32(opts.MaxMemoryPages))) //nolint:gosec // bounded above
 
-	r := wazero.NewRuntimeWithConfig(ctx, runtimeConfig)
-
-	// Instantiate WASI for filesystem and environment access
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, r); err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to instantiate WASI: %w", err)
+		_ = r.Close(ctx)
+		return nil, fmt.Errorf("instantiating WASI: %w", err)
 	}
-
-	runtime := &wasmRuntime{
-		config:  config,
-		logger:  logger,
-		runtime: r,
-		plugins: make(map[string]*wasmPlugin),
-		modules: make(map[string]wazero.CompiledModule),
-		ctx:     ctx,
-		cancel:  cancel,
-	}
-
-	// Register host functions
-	if err := runtime.registerHostFunctions(); err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to register host functions: %w", err)
-	}
-
-	// Load configured plugins
-	if err := runtime.loadConfiguredPlugins(); err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to load plugins: %w", err)
-	}
-
-	logger.WithField("plugins", len(runtime.plugins)).Info("WASM runtime initialized")
-	return runtime, nil
-}
-
-// registerHostFunctions registers functions that WASM modules can call
-func (r *wasmRuntime) registerHostFunctions() error {
-	// Create host module with functions
-	_, err := r.runtime.NewHostModuleBuilder("env").
+	rt := &Runtime{opts: opts, logger: logger, r: r}
+	_, err := r.NewHostModuleBuilder("env").
 		NewFunctionBuilder().
-		WithFunc(func(ctx context.Context, m api.Module, offset, size uint32) {
-			// log function: reads string from memory and logs it
-			data, ok := m.Memory().Read(offset, size)
+		WithFunc(func(ctx context.Context, m api.Module, ptr, size uint32) {
+			msg, ok := m.Memory().Read(ptr, size)
 			if !ok {
-				r.logger.Error("Failed to read log message from WASM memory")
 				return
 			}
-			r.logger.Info(string(data))
+			name, _ := ctx.Value(pluginNameKey{}).(string)
+			rt.logger.WithField("wasm_plugin", name).Info(string(msg))
 		}).
 		Export("log").
-		NewFunctionBuilder().
-		WithFunc(func(ctx context.Context, m api.Module) int64 {
-			// get_time function: returns current unix timestamp
-			return time.Now().Unix()
-		}).
-		Export("get_time").
-		Instantiate(r.ctx)
-
-	return err
-}
-
-// loadConfiguredPlugins loads all plugins from configuration
-func (r *wasmRuntime) loadConfiguredPlugins() error {
-	for _, pluginConfig := range r.config.Plugins {
-		if !pluginConfig.Enabled {
-			r.logger.WithField("plugin", pluginConfig.Name).Debug("Plugin is disabled, skipping")
-			continue
-		}
-
-		// Resolve plugin path
-		pluginPath := pluginConfig.Path
-		if !filepath.IsAbs(pluginPath) {
-			pluginPath = filepath.Join(r.config.PluginDir, pluginPath)
-		}
-
-		if _, err := r.LoadPlugin(&pluginConfig); err != nil {
-			r.logger.WithError(err).WithField("plugin", pluginConfig.Name).Error("Failed to load plugin")
-			// Continue loading other plugins
-			continue
-		}
-
-		r.logger.WithFields(logrus.Fields{
-			"plugin": pluginConfig.Name,
-			"type":   pluginConfig.Type,
-			"path":   pluginPath,
-		}).Info("Plugin loaded successfully")
-	}
-
-	return nil
-}
-
-// LoadPlugin loads a WASM plugin from file
-func (r *wasmRuntime) LoadPlugin(config *PluginConfig) (Plugin, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Check if plugin already loaded
-	if existing, ok := r.plugins[config.Name]; ok {
-		return existing, nil
-	}
-
-	// Resolve plugin path
-	pluginPath := config.Path
-	if !filepath.IsAbs(pluginPath) {
-		pluginPath = filepath.Join(r.config.PluginDir, pluginPath)
-	}
-
-	// Read WASM binary
-	wasmBytes, err := os.ReadFile(pluginPath)
+		Instantiate(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read plugin file: %w", err)
+		_ = r.Close(ctx)
+		return nil, fmt.Errorf("instantiating host functions: %w", err)
 	}
+	return rt, nil
+}
 
-	// Compile or get from cache
-	var compiled wazero.CompiledModule
-	if r.config.CacheEnabled {
-		if cached, ok := r.modules[config.Name]; ok {
-			compiled = cached
-		}
+// Load compiles the plugin at cfg.Path and checks its exports. Its instances are created on
+// demand, up to MaxInstances.
+func (rt *Runtime) Load(cfg PluginConfig) (*Plugin, error) {
+	path := cfg.Path
+	if !filepath.IsAbs(path) && rt.opts.PluginDir != "" {
+		path = filepath.Join(rt.opts.PluginDir, path)
 	}
-
-	if compiled == nil {
-		compiled, err = r.runtime.CompileModule(r.ctx, wasmBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compile plugin: %w", err)
-		}
-
-		if r.config.CacheEnabled {
-			r.modules[config.Name] = compiled
-		}
-	}
-
-	// Instantiate module
-	moduleConfig := wazero.NewModuleConfig().WithName(config.Name)
-	module, err := r.runtime.InstantiateModule(r.ctx, compiled, moduleConfig)
+	code, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return nil, fmt.Errorf("failed to instantiate plugin: %w", err)
+		return nil, fmt.Errorf("wasm plugin %s: %w", cfg.Name, err)
 	}
-
-	// Get exported functions
-	exports := make(map[string]api.Function)
-	for _, name := range []string{"init", "execute", "cleanup"} {
-		if fn := module.ExportedFunction(name); fn != nil {
-			exports[name] = fn
-		}
-	}
-
-	// Call init function if exists
-	if initFn, ok := exports["init"]; ok {
-		if _, err := initFn.Call(r.ctx); err != nil {
-			return nil, fmt.Errorf("plugin init failed: %w", err)
-		}
-	}
-
-	plugin := &wasmPlugin{
-		config:  config,
-		runtime: r,
-		module:  module,
-		exports: exports,
-	}
-
-	r.plugins[config.Name] = plugin
-	return plugin, nil
-}
-
-// GetPlugin retrieves a loaded plugin by name
-func (r *wasmRuntime) GetPlugin(name string) (Plugin, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	plugin, ok := r.plugins[name]
-	if !ok {
-		return nil, fmt.Errorf("plugin not found: %s", name)
-	}
-
-	return plugin, nil
-}
-
-// ListPlugins returns all loaded plugins
-func (r *wasmRuntime) ListPlugins() []Plugin {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	plugins := make([]Plugin, 0, len(r.plugins))
-	for _, plugin := range r.plugins {
-		plugins = append(plugins, plugin)
-	}
-
-	return plugins
-}
-
-// UnloadPlugin unloads a plugin
-func (r *wasmRuntime) UnloadPlugin(name string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	plugin, ok := r.plugins[name]
-	if !ok {
-		return fmt.Errorf("plugin not found: %s", name)
-	}
-
-	if err := plugin.Close(); err != nil {
-		return fmt.Errorf("failed to close plugin: %w", err)
-	}
-
-	delete(r.plugins, name)
-	return nil
-}
-
-// Close shuts down the runtime
-func (r *wasmRuntime) Close() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Close all plugins
-	for name, plugin := range r.plugins {
-		if err := plugin.Close(); err != nil {
-			r.logger.WithError(err).WithField("plugin", name).Error("Failed to close plugin")
-		}
-	}
-
-	r.cancel()
-	return r.runtime.Close(r.ctx)
-}
-
-// Plugin implementation
-
-// Name returns the plugin name
-func (p *wasmPlugin) Name() string {
-	return p.config.Name
-}
-
-// Type returns the plugin type
-func (p *wasmPlugin) Type() PluginType {
-	return p.config.Type
-}
-
-// Execute runs the plugin with the given context and input
-func (p *wasmPlugin) Execute(ctx context.Context, pluginCtx *PluginContext, input interface{}) (*PluginResult, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// Check instance limit
-	if p.runtime.config.MaxInstances > 0 && p.instances >= p.runtime.config.MaxInstances {
-		return nil, fmt.Errorf("max instances reached for plugin %s", p.config.Name)
-	}
-
-	p.instances++
-	defer func() { p.instances-- }()
-
-	// Get execute function
-	executeFn, ok := p.exports["execute"]
-	if !ok {
-		return nil, fmt.Errorf("plugin does not export 'execute' function")
-	}
-
-	// Prepare input data
-	inputData := map[string]interface{}{
-		"context": pluginCtx,
-		"input":   input,
-		"config":  p.config.Config,
-	}
-
-	inputJSON, err := json.Marshal(inputData)
+	ctx := context.Background()
+	compiled, err := rt.r.CompileModule(ctx, code)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal input: %w", err)
+		return nil, fmt.Errorf("wasm plugin %s: compiling: %w", cfg.Name, err)
 	}
-
-	// Get memory and write input
-	mem := p.module.Memory()
-	if len(inputJSON) > math.MaxUint32/2 {
-		return nil, fmt.Errorf("plugin input too large: %d bytes", len(inputJSON))
-	}
-	inputSize := uint32(len(inputJSON)) //nolint:gosec // bounded above
-
-	// Get current memory size and allocate at the end
-	memSize := mem.Size()
-	inputPtr := memSize
-
-	// Grow memory if needed
-	pagesNeeded := (inputSize + 65535) / 65536 // Calculate pages needed (64KB per page)
-	if pagesNeeded > 0 {
-		if _, ok := mem.Grow(pagesNeeded); !ok {
-			return nil, fmt.Errorf("failed to grow memory for input")
+	exports := compiled.ExportedFunctions()
+	for _, name := range []string{"odin_alloc", "odin_handle"} {
+		if _, ok := exports[name]; !ok {
+			_ = compiled.Close(ctx)
+			return nil, fmt.Errorf("wasm plugin %s: does not export %s (see the plugin ABI in docs/plugins.md)", cfg.Name, name)
 		}
 	}
-
-	// Write input to memory
-	if !mem.Write(inputPtr, inputJSON) {
-		return nil, fmt.Errorf("failed to write input to memory")
+	if _, ok := compiled.ExportedMemories()["memory"]; !ok {
+		_ = compiled.Close(ctx)
+		return nil, fmt.Errorf("wasm plugin %s: does not export its memory", cfg.Name)
 	}
-
-	// Execute with timeout
-	execCtx := ctx
-	if p.config.Timeout > 0 {
-		var cancel context.CancelFunc
-		execCtx, cancel = context.WithTimeout(ctx, p.config.Timeout)
-		defer cancel()
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = DefaultTimeout
 	}
-
-	// Call execute function (passes input pointer and size, returns output pointer and size)
-	results, err := executeFn.Call(execCtx, uint64(inputPtr), uint64(inputSize))
+	p := &Plugin{
+		cfg:      cfg,
+		rt:       rt,
+		compiled: compiled,
+		idle:     make(chan api.Module, rt.opts.MaxInstances),
+		slots:    make(chan struct{}, rt.opts.MaxInstances),
+	}
+	// Instantiate one now, so a module that fails to start is reported at startup.
+	m, err := p.instantiate()
 	if err != nil {
-		return nil, fmt.Errorf("plugin execution failed: %w", err)
+		_ = compiled.Close(ctx)
+		return nil, err
 	}
-
-	if len(results) < 2 {
-		return nil, fmt.Errorf("plugin returned invalid results")
-	}
-
-	// Read output from memory
-	if results[0] > math.MaxUint32 || results[1] > math.MaxUint32 {
-		return nil, fmt.Errorf("plugin returned an out-of-range output pointer or size")
-	}
-	outputPtr := uint32(results[0])  //nolint:gosec // bounded above
-	outputSize := uint32(results[1]) //nolint:gosec // bounded above
-
-	outputJSON, ok := mem.Read(outputPtr, outputSize)
-	if !ok {
-		return nil, fmt.Errorf("failed to read output from memory")
-	}
-
-	// Parse result
-	var result PluginResult
-	if err := json.Unmarshal(outputJSON, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal result: %w", err)
-	}
-
-	return &result, nil
+	p.idle <- m
+	return p, nil
 }
 
-// Close cleans up plugin resources
-func (p *wasmPlugin) Close() error {
-	// Call cleanup function if exists
-	if cleanupFn, ok := p.exports["cleanup"]; ok {
-		if _, err := cleanupFn.Call(p.runtime.ctx); err != nil {
-			return fmt.Errorf("plugin cleanup failed: %w", err)
-		}
-	}
-
-	return p.module.Close(p.runtime.ctx)
+// Close releases every plugin and the runtime.
+func (rt *Runtime) Close() error {
+	return rt.r.Close(context.Background())
 }
 
-// noopRuntime is a no-op implementation when WASM is disabled
-type noopRuntime struct{}
-
-func (n *noopRuntime) LoadPlugin(config *PluginConfig) (Plugin, error) {
-	return nil, fmt.Errorf("WASM runtime is disabled")
-}
-
-func (n *noopRuntime) GetPlugin(name string) (Plugin, error) {
-	return nil, fmt.Errorf("WASM runtime is disabled")
-}
-
-func (n *noopRuntime) ListPlugins() []Plugin {
-	return nil
-}
-
-func (n *noopRuntime) UnloadPlugin(name string) error {
-	return fmt.Errorf("WASM runtime is disabled")
-}
-
-func (n *noopRuntime) Close() error {
-	return nil
+// moduleConfig gives each instance real clocks and randomness (wazero's defaults are fixed, for
+// reproducibility) and nothing else: no file system, arguments or environment.
+func moduleConfig() wazero.ModuleConfig {
+	return wazero.NewModuleConfig().
+		WithName("").
+		WithStartFunctions("_initialize").
+		WithSysWalltime().
+		WithSysNanotime().
+		WithSysNanosleep().
+		WithRandSource(rand.Reader)
 }

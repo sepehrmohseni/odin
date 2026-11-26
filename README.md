@@ -74,16 +74,17 @@ What Odin does today. Each item is covered by the end-to-end tests in
   introspection limits.
 - **Observability**: Prometheus metrics per service, OpenTelemetry traces with context
   propagation, structured access logs, `/health`, `/ready` and `/live`.
-- **Plugins**: Go middleware plugins in three phases of each service's pipeline (before
-  authentication, after it, before proxying), ordered by priority and limited to routes,
-  enabled and disabled without a restart; hook plugins around every request.
+- **Plugins**: Go and WebAssembly middleware plugins in three phases of each service's pipeline
+  (before authentication, after it, before proxying), ordered by priority and limited to routes;
+  WebAssembly plugins are sandboxed, memory-capped and time-limited. Hook plugins around every
+  request.
 - **API description**: a generated OpenAPI 3 document of the routes, or your own, with
   Swagger UI.
 - **Admin interface** (opt-in): dashboard, services, monitoring, traces and settings, behind
   sessions with CSRF protection and login throttling; Go plugin upload with static validation;
   Postman collection sync (with MongoDB).
 
-Planned and known gaps (gRPC transcoding, OAuth2/OIDC, WASM plugins, live reload, more
+Planned and known gaps (gRPC transcoding, OAuth2/OIDC, live reload, more
 load-balancing algorithms and others) are listed in [ROADMAP.md](ROADMAP.md),
 and the findings behind them in [docs/AUDIT.md](docs/AUDIT.md).
 
@@ -141,7 +142,7 @@ test/unit/           tests (test/unit/pkg/gateway drives the whole gateway)
 docker/ci/ scripts/  check image and wrappers;  deployments/  Docker, Kubernetes, Helm
 ```
 
-Some packages are not wired into the gateway yet (WASM, multi-cluster, AI traffic analysis);
+Some packages are not wired into the gateway yet (multi-cluster, AI traffic analysis);
 see [ROADMAP.md](ROADMAP.md).
 
 ## Deployment

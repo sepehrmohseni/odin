@@ -40,7 +40,7 @@ type backend struct {
 	calls atomic.Int64
 }
 
-func newBackend(t *testing.T, handler http.HandlerFunc) *backend {
+func newBackend(t testing.TB, handler http.HandlerFunc) *backend {
 	t.Helper()
 	b := &backend{}
 	b.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

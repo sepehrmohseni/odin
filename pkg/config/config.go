@@ -223,24 +223,44 @@ type ConsulMeshConfig struct {
 }
 
 type WASMConfig struct {
-	Enabled        bool               `yaml:"enabled"`
-	PluginDir      string             `yaml:"pluginDir"`
-	Plugins        []WASMPluginConfig `yaml:"plugins"`
-	MaxMemoryPages int                `yaml:"maxMemoryPages"`
-	MaxInstances   int                `yaml:"maxInstances"`
-	CacheEnabled   bool               `yaml:"cacheEnabled"`
+	// Load the WebAssembly middleware plugins below into the request pipeline.
+	Enabled bool `yaml:"enabled"`
+	// Directory that relative plugin paths are resolved against.
+	PluginDir string `yaml:"pluginDir"`
+	// The plugins.
+	Plugins []WASMPluginConfig `yaml:"plugins"`
+	// Memory limit of each plugin instance in 64 KiB pages (default 512, 32 MiB).
+	MaxMemoryPages int `yaml:"maxMemoryPages"`
+	// Instances per plugin, which is how many requests one plugin handles at a time (default 4).
+	MaxInstances int `yaml:"maxInstances"`
 }
 
+// WASMPluginConfig is one WebAssembly middleware plugin (see docs/plugins.md for the ABI).
 type WASMPluginConfig struct {
-	Name        string                 `yaml:"name"`
-	Path        string                 `yaml:"path"`
-	Type        string                 `yaml:"type"` // request, response, auth, ratelimit, middleware, aggregation
-	Enabled     bool                   `yaml:"enabled"`
-	Priority    int                    `yaml:"priority"`
-	Config      map[string]interface{} `yaml:"config"`
-	Timeout     time.Duration          `yaml:"timeout"`
-	AllowedURLs []string               `yaml:"allowedUrls"`
-	Services    []string               `yaml:"services"`
+	// Unique name, shown on the admin's Middleware page.
+	Name string `yaml:"name"`
+	// The .wasm file, absolute or relative to pluginDir.
+	Path string `yaml:"path"`
+	// Load it; disabled plugins are skipped.
+	Enabled bool `yaml:"enabled"`
+	// Pipeline phase: pre-auth, post-auth (default) or pre-proxy.
+	Phase string `yaml:"phase"`
+	// Deprecated: use phase. "auth" means pre-auth; other values mean post-auth.
+	Type string `yaml:"type"`
+	// Order within the phase; lower runs first.
+	Priority int `yaml:"priority"`
+	// Path patterns it applies to (default ["*"], every service route).
+	Routes []string `yaml:"routes"`
+	// Service names it applies to; empty means every service its routes match.
+	Services []string `yaml:"services"`
+	// Handed to the plugin with every request.
+	Config map[string]interface{} `yaml:"config"`
+	// Per-request limit; the call is interrupted when it is exceeded (default 100ms).
+	Timeout time.Duration `yaml:"timeout"`
+	// Hand the request body (up to 1 MiB) to the plugin.
+	ReadBody bool `yaml:"readBody"`
+	// On a plugin error or timeout, let the request continue instead of answering 500.
+	FailOpen bool `yaml:"failOpen"`
 }
 
 type MultiClusterConfig struct {

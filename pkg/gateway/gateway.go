@@ -31,6 +31,7 @@ import (
 	"odin/pkg/service"
 	"odin/pkg/servicemesh"
 	"odin/pkg/tracing"
+	"odin/pkg/wasm"
 
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
@@ -242,6 +243,15 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 	// The Middleware page shows and changes the live chain; with MongoDB, changes are saved.
 	adminHandler.SetMiddlewareAPIHandler(pluginManager, pluginRepo)
 
+	// WebAssembly plugins join the same pipeline. A plugin that fails to load stops startup:
+	// skipping, say, an authentication plugin would leave its routes open.
+	var wasmRuntime io.Closer
+	if cfg.WASM.Enabled {
+		if wasmRuntime, err = loadWASMPlugins(cfg.WASM, pluginManager, logger); err != nil {
+			return nil, err
+		}
+	}
+
 	// Initialize plugin upload handler if MongoDB is available
 	if mongoRepo != nil {
 		mongoDB := mongoRepo.GetDatabase()
@@ -371,6 +381,9 @@ func New(cfg *config.Config, configPath string, logger *logrus.Logger) (*Gateway
 		alertManager:    alertManager,
 		meshManager:     meshManager,
 		mongoRepo:       mongoRepo,
+	}
+	if wasmRuntime != nil {
+		gateway.closers = append(gateway.closers, wasmRuntime)
 	}
 
 	// Setup protocol-specific proxies
@@ -921,4 +934,49 @@ func OpenAPI(cfg *config.Config) *openapi.Spec {
 		Version:     cfg.OpenAPI.Version,
 		Description: cfg.OpenAPI.Description,
 	}, services)
+}
+
+// loadWASMPlugins compiles the enabled WebAssembly plugins and registers each in its phase of
+// the middleware pipeline.
+func loadWASMPlugins(cfg config.WASMConfig, pm *plugins.PluginManager, logger *logrus.Logger) (io.Closer, error) {
+	rt, err := wasm.NewRuntime(wasm.Options{
+		PluginDir:      cfg.PluginDir,
+		MaxMemoryPages: cfg.MaxMemoryPages,
+		MaxInstances:   cfg.MaxInstances,
+	}, logger)
+	if err != nil {
+		return nil, fmt.Errorf("wasm: %w", err)
+	}
+	for _, pc := range cfg.Plugins {
+		if !pc.Enabled {
+			continue
+		}
+		phase := pc.Phase
+		if phase == "" && pc.Type == "auth" {
+			phase = string(plugins.PhasePreAuth)
+		}
+		routes := pc.Routes
+		if len(routes) == 0 {
+			routes = []string{"*"}
+		}
+		p, err := rt.Load(wasm.PluginConfig{
+			Name:     pc.Name,
+			Path:     pc.Path,
+			Config:   pc.Config,
+			Timeout:  pc.Timeout,
+			Services: pc.Services,
+			ReadBody: pc.ReadBody,
+			FailOpen: pc.FailOpen,
+		})
+		if err != nil {
+			_ = rt.Close()
+			return nil, err
+		}
+		if err := pm.RegisterMiddleware(pc.Name, p, pc.Priority, routes, phase); err != nil {
+			_ = rt.Close()
+			return nil, fmt.Errorf("wasm plugin %s: %w", pc.Name, err)
+		}
+		logger.WithFields(logrus.Fields{"plugin": pc.Name, "phase": phase, "routes": routes}).Info("WASM plugin loaded")
+	}
+	return rt, nil
 }
