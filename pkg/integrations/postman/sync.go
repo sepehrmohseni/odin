@@ -54,16 +54,17 @@ type SyncRecord struct {
 
 // SyncEngine handles synchronization between Postman and Odin
 type SyncEngine struct {
-	client       *Client
-	transformer  *Transformer
-	config       *IntegrationConfig
-	logger       *logrus.Logger
-	repository   SyncRepository
-	stopChan     chan struct{}
-	wg           sync.WaitGroup
-	mu           sync.RWMutex
-	running      bool
-	lastSyncTime map[string]time.Time // collectionID -> last sync time
+	client        *Client
+	transformer   *Transformer
+	config        *IntegrationConfig
+	logger        *logrus.Logger
+	repository    SyncRepository
+	stopChan      chan struct{}
+	wg            sync.WaitGroup
+	mu            sync.RWMutex
+	running       bool
+	lastSyncTime  map[string]time.Time // collectionID -> last sync time
+	lookupService func(name string) (*config.ServiceConfig, bool)
 }
 
 // SyncRepository interface for persisting sync records
@@ -73,6 +74,13 @@ type SyncRepository interface {
 	GetSyncHistory(ctx context.Context, collectionID string, limit int) ([]*SyncRecord, error)
 	GetLastSync(ctx context.Context, collectionID string, direction SyncDirection) (*SyncRecord, error)
 	UpdateSyncStatus(ctx context.Context, id string, status SyncStatus, err error) error
+}
+
+// SetServiceLookup gives the engine read access to the gateway's services, which export needs.
+func (s *SyncEngine) SetServiceLookup(lookup func(name string) (*config.ServiceConfig, bool)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lookupService = lookup
 }
 
 // NewSyncEngine creates a new sync engine
@@ -340,11 +348,17 @@ func (s *SyncEngine) importFromPostman(ctx context.Context, collectionID, servic
 
 // exportToPostman exports Odin service to Postman
 func (s *SyncEngine) exportToPostman(ctx context.Context, collectionID, serviceName string, record *SyncRecord) error {
-	// This would fetch the service config from Odin
-	// For now, we'll create a placeholder
-	serviceConfig := &config.ServiceConfig{
-		Name:     serviceName,
-		BasePath: "/api/v1/" + serviceName,
+	// Export the gateway's real service definition. (This used to build a placeholder with no
+	// targets and write it over the chosen collection, destroying its contents.)
+	s.mu.Lock()
+	lookup := s.lookupService
+	s.mu.Unlock()
+	if lookup == nil {
+		return fmt.Errorf("export is unavailable: the sync engine has no access to the gateway's services")
+	}
+	serviceConfig, ok := lookup(serviceName)
+	if !ok || serviceConfig == nil {
+		return fmt.Errorf("service %q is not configured on this gateway; nothing was exported", serviceName)
 	}
 
 	// Transform to Postman collection

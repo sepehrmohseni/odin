@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -23,6 +24,11 @@ type Client struct {
 	httpClient *http.Client
 	logger     *logrus.Logger
 	baseURL    string
+}
+
+// SetBaseURL points the client at another API endpoint (a proxy, or a test server).
+func (c *Client) SetBaseURL(u string) {
+	c.baseURL = strings.TrimSuffix(u, "/")
 }
 
 // NewClient creates a new Postman API client

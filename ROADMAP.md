@@ -32,7 +32,7 @@ Critical and high items that are contained enough to finish in the current harde
       ([OPS-07](docs/AUDIT.md#operations)) — the first tag and public image wait for the owner
 - [x] Admin pages render their own content; plugin pages render at all
       ([COR-11](docs/AUDIT.md#correctness))
-- [ ] "Export to Postman" refuses instead of overwriting a collection with a placeholder
+- [x] "Export to Postman" exports the configured service, or refuses, instead of overwriting a collection with a placeholder
       ([COR-15](docs/AUDIT.md#correctness))
 - [ ] First-run setup: one-command quickstart script and a setup guide (Docker, Compose, binary,
       Helm) that ends at the admin login

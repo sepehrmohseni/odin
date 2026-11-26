@@ -138,6 +138,17 @@ func (h *AdminHandler) SetMiddlewareAPIHandler(pluginManager *plugins.PluginMana
 // SetIntegrationHandler sets the integration handler for admin
 func (h *AdminHandler) SetIntegrationHandler(handler *IntegrationHandler) {
 	h.integrationHandler = handler
+	handler.SetServiceLookup(func(name string) (*config.ServiceConfig, bool) {
+		configMu.Lock()
+		defer configMu.Unlock()
+		for i := range h.config.Services {
+			if h.config.Services[i].Name == name {
+				svc := h.config.Services[i]
+				return &svc, true
+			}
+		}
+		return nil, false
+	})
 }
 
 // SetPluginUploadHandler sets the plugin upload handler for admin

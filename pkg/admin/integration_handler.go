@@ -23,6 +23,15 @@ type IntegrationHandler struct {
 	repository *postman.MongoDBRepository
 	logger     *logrus.Logger
 	config     *postman.IntegrationConfig
+	lookup     func(name string) (*config.ServiceConfig, bool)
+}
+
+// SetServiceLookup lets "export to Postman" read the gateway's services.
+func (h *IntegrationHandler) SetServiceLookup(lookup func(name string) (*config.ServiceConfig, bool)) {
+	h.lookup = lookup
+	if h.syncEngine != nil {
+		h.syncEngine.SetServiceLookup(lookup)
+	}
 }
 
 // NewIntegrationHandler creates a new integration handler
@@ -68,6 +77,7 @@ func (h *IntegrationHandler) Initialize(ctx context.Context) error {
 		}
 	}
 	h.syncEngine = postman.NewSyncEngine(h.client, config, h.repository, h.logger)
+	h.syncEngine.SetServiceLookup(h.lookup)
 
 	// Initialize Newman runner
 	h.newman = postman.NewNewmanRunner(h.repository, h.logger)
