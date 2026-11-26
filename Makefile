@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker docker-compose helm-package helm-install check check-test check-lint ci-local ci-quick
+.PHONY: build run test clean docker quickstart docker-compose docker-compose-down helm-package helm-install check check-test check-lint ci-local ci-quick
 
 BINARY_NAME=odin
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -78,15 +78,17 @@ clean: clean-plugins
 
 docker:
 	@echo "Building Docker image..."
-	docker build -t odin-gateway:latest -f deployments/docker/Dockerfile.prod .
+	docker build --build-arg VERSION=$(VERSION) --build-arg BUILD_TIME=$(BUILD_TIME) -t odin:$(VERSION) -t odin:latest .
+
+# Development stack (Odin, Redis, MongoDB, demo backends); see docker-compose.yml.
+quickstart:
+	@scripts/quickstart.sh
 
 docker-compose:
-	@echo "Starting services with Docker Compose..."
-	docker-compose up -d
+	docker compose up -d --build --wait
 
-docker-compose-dev:
-	@echo "Starting development environment with Docker Compose..."
-	docker-compose -f docker-compose.dev.yml up -d
+docker-compose-down:
+	docker compose down -v
 
 helm-package:
 	@echo "Packaging Helm chart..."
@@ -155,9 +157,10 @@ help:
 	@echo "  test-websocket        - Run WebSocket tests"
 	@echo "  lint                  - Run linter"
 	@echo "  clean                 - Clean build artifacts"
-	@echo "  docker                - Build Docker image"
-	@echo "  docker-compose        - Start all services with Docker Compose"
-	@echo "  docker-compose-dev    - Start development environment"
+	@echo "  docker                - Build the runtime image (odin:latest)"
+	@echo "  quickstart            - First run: create .env, start the dev stack, print the admin login"
+	@echo "  docker-compose        - Start the dev stack and wait until it is healthy"
+	@echo "  docker-compose-down   - Stop the dev stack and delete its volumes"
 	@echo "  helm-package          - Package Helm chart"
 	@echo "  helm-install          - Install Helm chart"
 	@echo "  helm-upgrade          - Upgrade Helm chart"

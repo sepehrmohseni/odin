@@ -1,0 +1,23 @@
+# The image build needs go.mod, go.sum, cmd/, pkg/ and config/default_config.yaml. Everything
+# else stays out of the build context (smaller, faster, and no local secrets or VCS history).
+.git
+.github
+.claude
+bin
+dist
+coverage.out
+coverage.html
+*.test
+*.log
+.env
+.env.*
+!.env.example
+docs
+examples
+deployments
+monitoring
+scripts
+docker/ci
+test
+config/*
+!config/default_config.yaml

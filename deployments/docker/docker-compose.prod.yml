@@ -1,30 +1,43 @@
-version: '3.8'
+# A production-style single-host deployment: Odin from the repository's Dockerfile with your own
+# config, plus Redis for shared rate limits and caching. Run from this directory:
+#
+#   ODIN_JWT_SECRET=... docker compose -f docker-compose.prod.yml up -d --wait
+#
+# Put your configuration in ../../config/config.yaml (see config/default_config.yaml and
+# docs/configuration.md). Use redis://redis:6379 as rateLimit.redisUrl / cache.redisUrl.
+
+name: odin-prod
 
 services:
   odin:
     build:
       context: ../../
-      dockerfile: deployments/docker/Dockerfile.prod
+      dockerfile: Dockerfile
+    image: odin:latest
     restart: always
     ports:
       - '8080:8080'
-      - '8081:8081'
-    volumes:
-      - ../../config:/app/config:ro
     environment:
-      - LOG_LEVEL=info
-      - REDIS_HOST=redis
+      ODIN_JWT_SECRET: ${ODIN_JWT_SECRET:?set ODIN_JWT_SECRET}
+      ODIN_ADMIN_PASSWORD: ${ODIN_ADMIN_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ../../config/config.yaml:/app/config/config.yaml:ro
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
     healthcheck:
-      test: ['CMD', 'wget', '-q', '-O-', 'http://localhost:8080/health']
-      interval: 30s
+      test: ['CMD', '/app/odin', '-healthcheck']
+      interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 5s
+      start_period: 10s
 
   redis:
-    image: redis:alpine
+    image: redis:8.12.0-alpine
     restart: always
     volumes:
       - redis-data:/data
@@ -32,34 +45,7 @@ services:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
-      retries: 3
-
-  prometheus:
-    image: prom/prometheus:latest
-    restart: always
-    volumes:
-      - ../../monitoring/prometheus:/etc/prometheus
-      - prometheus-data:/prometheus
-    ports:
-      - '9090:9090'
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-
-  grafana:
-    image: grafana/grafana:latest
-    restart: always
-    ports:
-      - '3000:3000'
-    depends_on:
-      - prometheus
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-    volumes:
-      - ../../monitoring/grafana:/etc/grafana/provisioning
-      - grafana-data:/var/lib/grafana
+      retries: 10
 
 volumes:
   redis-data:
-  prometheus-data:
-  grafana-data:

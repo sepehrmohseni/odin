@@ -1,63 +1,38 @@
-# Odin API Gateway Default Configuration
-gateway:
-  port: 8080
-  adminPort: 8081
-  logLevel: info
-  timeout: 30s
-  maxIdleConns: 100
-  maxIdleConnsPerHost: 100
-  idleConnTimeout: 90s
+# Odin's built-in configuration (the Docker image's /app/config/config.yaml).
+#
+# It starts a gateway with no routes: /health, /ready, /live and /metrics answer, nothing else
+# does. Mount your own file over /app/config/config.yaml to add services. See
+# docs/getting-started.md and docs/configuration.md.
+#
+# ${NAME:-default} values are read from the environment.
+
+server:
+  port: ${GATEWAY_PORT:-8080}
+  readTimeout: 30s
+  writeTimeout: 30s
+  gracefulTimeout: 15s
+  maxBodySize: 10M
+
+logging:
+  level: ${LOG_LEVEL:-info}
+  json: true
 
 monitoring:
   enabled: true
-  prometheusEndpoint: /metrics
+  path: /metrics
 
-cache:
-  enabled: true
-  type: memory # memory or redis
-  strategy: local
-  ttl: 60s
-  redis:
-    host: localhost
-    port: 6379
-    password: ''
-    db: 0
-
-rateLimit:
-  enabled: true
-  requestsPerMinute: 60
-
-auth:
-  enabled: true
-  jwtSecret: 'REPLACE_WITH_SECURE_SECRET'
-  excludedPaths:
-    - /health
-    - /metrics
-    - /api/public
-
+# The admin interface is off unless you turn it on. When ODIN_ADMIN_ENABLED=true and no password
+# is set (ODIN_ADMIN_PASSWORD, or admin.passwordHash), a random one is printed in the log.
 admin:
-  enabled: true
-  username: admin
-  # There is no default password. Set ODIN_ADMIN_PASSWORD (or admin.passwordHash, a bcrypt hash);
-  # otherwise a random password is generated at startup and printed in the log.
+  enabled: ${ODIN_ADMIN_ENABLED:-false}
+  username: ${ODIN_ADMIN_USERNAME:-admin}
 
-services:
-  - name: users
-    basePath: /api/users
-    stripBasePath: true
-    targets:
-      - http://localhost:8081
-    timeout: 10s
-    retryCount: 3
-    authentication: true
-    loadBalancing: round-robin
+# Services with authentication: true need a signing secret: set ODIN_JWT_SECRET.
+auth:
+  ignorePathRegexes:
+    - ^/health$
+    - ^/ready$
+    - ^/live$
+    - ^/metrics$
 
-  - name: products
-    basePath: /api/products
-    stripBasePath: true
-    targets:
-      - http://localhost:8083
-    timeout: 5s
-    retryCount: 2
-    authentication: false
-    loadBalancing: round-robin
+services: []

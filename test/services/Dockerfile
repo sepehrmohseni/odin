@@ -1,16 +1,13 @@
-FROM node:18-alpine
+# Demo backends for the development stack (users, products, orders, categories). Pick the
+# service with the container command, e.g. `node users-service/server.js`.
+FROM node:22.23.5-alpine
 
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 
-# Copy package.json and install dependencies
-COPY package*.json ./
-RUN npm install --only=production
-
-# Copy all service files
 COPY . .
 
-# Expose common ports for test services
-EXPOSE 8081 8082 8083 8084 8085
-
-# Default command (can be overridden)
-CMD ["npm", "start"]
+USER node
+EXPOSE 8081 8083 8084 8085
+CMD ["node", "users-service/server.js"]

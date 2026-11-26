@@ -1,0 +1,78 @@
+# Odin configuration for the local development stack in docker-compose.yml. Secrets come from
+# the environment (.env, see .env.example); ${NAME} is required, ${NAME:-x} has a default.
+
+server:
+  port: 8080
+  readTimeout: 30s
+  writeTimeout: 60s
+  gracefulTimeout: 15s
+  maxBodySize: 10M
+
+logging:
+  level: ${LOG_LEVEL:-info}
+  json: false
+
+monitoring:
+  enabled: true
+  path: /metrics
+
+admin:
+  enabled: true
+  username: ${ODIN_ADMIN_USERNAME:-admin}
+  # password: from ODIN_ADMIN_PASSWORD
+
+auth:
+  # jwtSecret: from ODIN_JWT_SECRET
+  ignorePathRegexes:
+    - ^/health$
+    - ^/metrics$
+
+# Shared Redis for rate limits and the response cache, so every gateway replica agrees.
+rateLimit:
+  enabled: true
+  limit: 600
+  duration: 1m
+  strategy: redis
+  redisUrl: redis://redis:6379/0
+
+cache:
+  enabled: true
+  ttl: 30s
+  strategy: redis
+  redisUrl: redis://redis:6379/1
+
+# MongoDB stores uploaded plugins and integration settings.
+mongodb:
+  enabled: true
+  uri: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+  database: odin
+  connectTimeout: 10s
+
+services:
+  - name: users
+    basePath: /api/users
+    targets: [http://users-service:8081]
+    healthCheck:
+      enabled: true
+      path: /api/users
+      interval: 10s
+
+  - name: products
+    basePath: /api/products
+    targets: [http://products-service:8083]
+    circuitBreaker:
+      enabled: true
+
+  - name: orders
+    basePath: /api/orders
+    targets: [http://orders-service:8084]
+    authentication: true
+    cache:
+      enabled: false
+
+  - name: categories
+    basePath: /api/categories
+    targets: [http://categories-service:8085]
+    rateLimit:
+      limit: 120
+      window: 1m

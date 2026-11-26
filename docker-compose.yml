@@ -1,157 +1,182 @@
-version: '3.8'
+# Local development stack: Odin with Redis, MongoDB and four demo backends.
+#
+#   cp .env.example .env          # then fill in the values (or run scripts/quickstart.sh)
+#   docker compose up -d --wait   # build and start; returns once everything is healthy
+#   curl http://localhost:8080/api/products
+#   docker compose down -v        # stop and delete the data volumes
+#
+# Optional profiles: `--profile observability` adds Prometheus (:9090) and Grafana (:3000);
+# `--profile ai` adds the demo traffic-analysis service (:8000).
+
+name: odin
+
+x-demo-backend: &demo-backend
+  build:
+    context: ./test/services
+  image: odin-demo-backends:dev
+  restart: unless-stopped
+  networks: [odin]
 
 services:
   odin:
     build:
       context: .
-      dockerfile: Dockerfile
+      args:
+        VERSION: dev
+    image: odin:dev
     ports:
-      - '8080:8080'
-      - '8081:8081'
-    volumes:
-      - ./config:/app/config
-    depends_on:
-      - redis
-      - mongodb
-      - odin-grok
-      - users-service
-      - products-service
-      - orders-service
-      - categories-service
+      - "${ODIN_PORT:-8080}:8080"
     environment:
-      - GATEWAY_PORT=8080
-      - LOG_LEVEL=info
-    networks:
-      - odin-network
+      ODIN_JWT_SECRET: ${ODIN_JWT_SECRET:?set ODIN_JWT_SECRET in .env}
+      ODIN_ADMIN_USERNAME: ${ODIN_ADMIN_USERNAME:-admin}
+      ODIN_ADMIN_PASSWORD: ${ODIN_ADMIN_PASSWORD:?set ODIN_ADMIN_PASSWORD in .env}
+      MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-odin}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./config/compose.yaml:/app/config/config.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      users-service:
+        condition: service_healthy
+      products-service:
+        condition: service_healthy
+      orders-service:
+        condition: service_healthy
+      categories-service:
+        condition: service_healthy
     healthcheck:
-      test: ['CMD', 'wget', '-q', '-O-', 'http://localhost:8080/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "/app/odin", "-healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 10s
     restart: unless-stopped
-
-  odin-grok:
-    build:
-      context: ./deployments/grok
-      dockerfile: Dockerfile
-    ports:
-      - '8000:8000'
-    environment:
-      - GROK_MODE=lightweight
-      - PORT=8000
-    networks:
-      - odin-network
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-
-  mongodb:
-    image: mongo:7
-    ports:
-      - '27017:27017'
-    volumes:
-      - mongodb-data:/data/db
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
-    networks:
-      - odin-network
-    restart: unless-stopped
+    networks: [odin]
 
   redis:
-    image: redis:alpine
-    ports:
-      - '6379:6379'
-    networks:
-      - odin-network
+    image: redis:8.12.0-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
+    networks: [odin]
+
+  mongodb:
+    image: mongo:8.0.38
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-odin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks: [odin]
+
+  users-service:
+    <<: *demo-backend
+    command: ["node", "users-service/server.js"]
+    healthcheck: &tcp-health
+      test: ["CMD", "node", "-e", "require('net').connect(+process.env.PORT,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      PORT: "8081"
+
+  products-service:
+    <<: *demo-backend
+    command: ["node", "products-service/server.js"]
+    healthcheck: *tcp-health
+    environment:
+      PORT: "8083"
+
+  orders-service:
+    <<: *demo-backend
+    command: ["node", "orders-service/server.js"]
+    healthcheck: *tcp-health
+    environment:
+      PORT: "8084"
+
+  categories-service:
+    <<: *demo-backend
+    command: ["node", "categories-service/server.js"]
+    healthcheck: *tcp-health
+    environment:
+      PORT: "8085"
 
   prometheus:
-    image: prom/prometheus:latest
+    profiles: [observability]
+    image: prom/prometheus:v3.16.0
     ports:
-      - '9090:9090'
+      - "9090:9090"
     volumes:
-      - ./monitoring/prometheus:/etc/prometheus
+      - ./monitoring/prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-      - --web.console.libraries=/etc/prometheus/console_libraries
-      - --web.console.templates=/etc/prometheus/consoles
-    networks:
-      - odin-network
-    restart: unless-stopped
+    depends_on:
+      odin:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [odin]
 
   grafana:
-    image: grafana/grafana:latest
+    profiles: [observability]
+    image: grafana/grafana:13.3.2
     ports:
-      - '3000:3000'
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
     volumes:
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - grafana-data:/var/lib/grafana
     depends_on:
-      - prometheus
-    networks:
-      - odin-network
-    restart: unless-stopped
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [odin]
 
-  users-service:
+  odin-grok:
+    profiles: [ai]
     build:
-      context: ./test/services
-      dockerfile: Dockerfile
-    command: ['node', 'users-service/server.js']
+      context: ./deployments/grok
+    environment:
+      GROK_MODE: lightweight
+      PORT: "8000"
     ports:
-      - '8081:8081'
-    networks:
-      - odin-network
-    restart: unless-stopped
-
-  products-service:
-    build:
-      context: ./test/services
-      dockerfile: Dockerfile
-    command: ['node', 'products-service/server.js']
-    ports:
-      - '8083:8083'
-    networks:
-      - odin-network
-    restart: unless-stopped
-
-  orders-service:
-    build:
-      context: ./test/services
-      dockerfile: Dockerfile
-    command: ['node', 'orders-service/server.js']
-    ports:
-      - '8084:8084'
-    networks:
-      - odin-network
-    restart: unless-stopped
-    depends_on:
-      - users-service
-      - products-service
-
-  categories-service:
-    build:
-      context: ./test/services
-      dockerfile: Dockerfile
-    command: ['node', 'categories-service/server.js']
-    ports:
-      - '8085:8085'
-    networks:
-      - odin-network
-    restart: unless-stopped
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks: [odin]
 
 networks:
-  odin-network:
+  odin:
 
 volumes:
   redis-data:

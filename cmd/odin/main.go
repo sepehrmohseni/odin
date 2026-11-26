@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"odin/pkg/config"
 	"odin/pkg/gateway"
@@ -23,14 +24,19 @@ var (
 
 func main() {
 	var configPath string
-	var showVersion bool
+	var showVersion, healthcheck bool
 	flag.StringVar(&configPath, "config", "config/config.yaml", "Path to configuration file")
 	flag.BoolVar(&showVersion, "version", false, "Print the version and exit")
+	flag.BoolVar(&healthcheck, "healthcheck", false,
+		"Check http://127.0.0.1:$GATEWAY_PORT/health (default port 8080) and exit 0 if healthy; for container health checks")
 	flag.Parse()
 
 	if showVersion {
 		fmt.Printf("odin %s %s\n", version, buildTime)
 		return
+	}
+	if healthcheck {
+		os.Exit(runHealthcheck())
 	}
 
 	logger := logging.NewLogger()
@@ -163,4 +169,25 @@ func main() {
 	}
 
 	logger.Info("Server gracefully shut down")
+}
+
+// runHealthcheck asks the local gateway for /health. The runtime image has no shell or wget, so
+// the container health check runs the binary itself.
+func runHealthcheck() int {
+	port := os.Getenv("GATEWAY_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + port + "/health")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "unhealthy:", err)
+		return 1
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "unhealthy: status", resp.StatusCode)
+		return 1
+	}
+	return 0
 }

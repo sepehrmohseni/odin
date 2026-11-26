@@ -20,6 +20,29 @@ jobs:
       - name: Run scripts/docker-check.sh all
         run: scripts/docker-check.sh all
 
+  # The development stack from docker-compose.yml, started the way a new user would.
+  compose:
+    name: Compose stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack (scripts/quickstart.sh)
+        run: scripts/quickstart.sh
+      - name: Probe the gateway
+        run: |
+          set -eux
+          curl -fsS http://localhost:8080/health
+          curl -fsS http://localhost:8080/api/products
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/orders)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/admin/api/settings)" = 401
+          test "$(docker compose exec -T odin id -u)" = 65532
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
